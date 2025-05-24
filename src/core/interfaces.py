@@ -25,11 +25,11 @@ class LLMInterface(ABC):
     """Abstract base class for all LLM implementations"""
 
     @abstractmethod
-    async def generate(self, prompt: str, **kwargs: Any):
+    async def generate(self, prompt: str, **kwargs: Any) -> str:
         pass
 
     @abstractmethod
-    async def chat(self, messages: List[Dict[str, str]], **kwargs: Any):
+    async def chat(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
         """Chat-style interaction"""
         pass
 
