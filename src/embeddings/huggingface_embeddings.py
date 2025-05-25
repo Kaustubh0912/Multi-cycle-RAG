@@ -7,6 +7,8 @@ from ..config.settings import settings
 from ..core.exceptions import EmbeddingException
 from ..core.interfaces import EmbeddingInterface
 
+torch._dynamo.config.disable = True
+
 
 class HuggingFaceEmbeddings(EmbeddingInterface):
     """HuggingFace embeddings with optimizations"""
@@ -41,8 +43,11 @@ class HuggingFaceEmbeddings(EmbeddingInterface):
             embeddings = self.model.encode(
                 texts,
                 convert_to_tensor=False,
-                batch_size=32,  # optimizable later
+                batch_size=32,
                 show_progress_bar=len(texts) > 100,
+                normalize_embeddings=True,
+                # Handle variable length inputs
+                truncate_dim=None,
             )
 
             return [emb.tolist() for emb in embeddings]

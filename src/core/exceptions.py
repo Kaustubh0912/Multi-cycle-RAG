@@ -20,3 +20,9 @@ class EmbeddingException(RAGException):
     """Embedding-related exceptions"""
 
     pass
+
+
+class DocumentProcessingException(Exception):
+    """Exception raised for document processing operations."""
+
+    pass
