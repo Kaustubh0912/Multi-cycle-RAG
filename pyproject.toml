@@ -9,6 +9,7 @@ dependencies = [
     "chromadb>=1.0.10",
     "dotenv>=0.9.9",
     "llama-index>=0.12.37",
+    "llama-index-core>=0.12.37",
     "numpy>=2.2.6",
     "pydantic>=2.11.5",
     "pydantic-settings>=2.9.1",
