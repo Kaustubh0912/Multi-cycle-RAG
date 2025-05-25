@@ -48,7 +48,7 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    async def delete_documents(self, doc_ids: List[str]):
+    async def delete_documents(self, doc_ids: List[str]) -> bool:
         """Delete documents by IDs"""
         pass
 

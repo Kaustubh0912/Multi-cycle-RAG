@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 import chromadb
 import numpy as np
@@ -9,6 +9,9 @@ from ..config.settings import settings
 from ..core.exceptions import VectorStoreException
 from ..core.interfaces import Document, VectorStoreInterface
 from ..embeddings.huggingface_embeddings import HuggingFaceEmbeddings
+
+# Define ChromaDB-compatible Metadata type
+ChromaMetadata = Mapping[str, Union[str, int, float, bool, None]]
 
 
 class ChromaVectorStore(VectorStoreInterface):
@@ -37,12 +40,38 @@ class ChromaVectorStore(VectorStoreInterface):
         except Exception as e:
             raise VectorStoreException(f"Failed to initialize ChromaDB: {e}")
 
+    def _sanitize_metadata(
+        self, metadatas: List[Dict[str, Any]]
+    ) -> List[ChromaMetadata]:
+        """Sanitize metadata to ensure ChromaDB compatibility"""
+        sanitized: List[ChromaMetadata] = []
+        for meta in metadatas:
+            if not meta:
+                sanitized.append({})
+                continue
+
+            clean_meta: Dict[str, Union[str, int, float, bool, None]] = {}
+            for k, v in meta.items():
+                if v is None:
+                    clean_meta[str(k)] = None  # Keep None as-is
+                elif isinstance(v, bool):
+                    clean_meta[str(k)] = v  # Keep booleans as-is
+                elif isinstance(v, (int, float)):
+                    clean_meta[str(k)] = v  # Keep numbers as-is
+                elif isinstance(v, str):
+                    clean_meta[str(k)] = v  # Keep strings as-is
+                else:
+                    # Convert other types to string
+                    clean_meta[str(k)] = str(v)
+            sanitized.append(clean_meta)
+        return sanitized
+
     async def add_documents(self, documents: List[Document]) -> List[str]:
-        """Add Documents with batch processing"""
+        """Add Documents with batch processing and metadata sanitization"""
         try:
-            doc_ids = []
-            texts = []
-            metadatas = []
+            doc_ids: List[str] = []
+            texts: List[str] = []
+            metadatas: List[Dict[str, Any]] = []
 
             for doc in documents:
                 doc_id = doc.doc_id or str(uuid.uuid4())
@@ -50,12 +79,16 @@ class ChromaVectorStore(VectorStoreInterface):
                 texts.append(doc.content)
                 metadatas.append(doc.metadata)
 
+            # Sanitize metadata before sending to ChromaDB
+            sanitized_metadatas: List[ChromaMetadata] = self._sanitize_metadata(
+                metadatas
+            )
+
             # Generate embeddings efficiently
             embeddings = await self.embedding_function.embed_documents(texts)
 
-            # Fix 1: Convert embeddings to numpy arrays if needed
-            # ChromaDB can be picky about embedding formats
-            processed_embeddings = []
+            # Convert embeddings to proper format
+            processed_embeddings: List[np.ndarray] = []
             for embedding in embeddings:
                 if isinstance(embedding, list):
                     processed_embeddings.append(
@@ -66,8 +99,8 @@ class ChromaVectorStore(VectorStoreInterface):
 
             self.collection.add(
                 documents=texts,
-                embeddings=processed_embeddings,  # Use processed embeddings
-                metadatas=metadatas,
+                embeddings=processed_embeddings,
+                metadatas=sanitized_metadatas,  # Now properly typed
                 ids=doc_ids,
             )
 
@@ -92,7 +125,7 @@ class ChromaVectorStore(VectorStoreInterface):
                 include=["documents", "metadatas", "distances"],
             )
 
-            # Fix 2-6: Add proper null checks before accessing results
+            # Add proper null checks before accessing results
             if not results or not isinstance(results, dict):
                 return []
 
@@ -106,7 +139,7 @@ class ChromaVectorStore(VectorStoreInterface):
                 return []
 
             # Convert to Document Objects with proper null handling
-            documents = []
+            documents: List[Document] = []
             doc_count = len(documents_list[0])
 
             for i in range(doc_count):
@@ -127,7 +160,7 @@ class ChromaVectorStore(VectorStoreInterface):
                     metadata_raw = metadatas_list[0][i]
 
                 # Convert metadata to proper Dict[str, Any] format
-                metadata: dict[str, Any] = {}
+                metadata: Dict[str, Any] = {}
                 if metadata_raw:
                     # Handle ChromaDB metadata format conversion
                     if isinstance(metadata_raw, dict):
@@ -168,10 +201,11 @@ class ChromaVectorStore(VectorStoreInterface):
                 f"Failed to perform similarity search: {e}"
             )
 
-    async def delete_documents(self, doc_ids: List[str]):
+    async def delete_documents(self, doc_ids: List[str]) -> bool:
         """Delete documents by IDs"""
         try:
             if doc_ids:
                 self.collection.delete(ids=doc_ids)
+            return True
         except Exception as e:
             raise VectorStoreException(f"Failed to delete documents: {e}")

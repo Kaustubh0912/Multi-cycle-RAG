@@ -93,14 +93,31 @@ class DocumentProcessor:
 
             for i, chunk in enumerate(chunks):
                 if chunk.strip():  # Only add non-empty chunks
-                    chunk_doc = Document(
-                        content=chunk.strip(),
-                        metadata={
-                            **doc.metadata,
+                    # 🔥 CRITICAL FIX: Ensure no None values in metadata
+                    chunk_metadata = {}
+
+                    # Copy original metadata, replacing None values
+                    for k, v in doc.metadata.items():
+                        if v is not None:
+                            chunk_metadata[k] = v
+                        else:
+                            chunk_metadata[k] = (
+                                ""  # Replace None with empty string
+                            )
+
+                    # Add chunk-specific metadata
+                    chunk_metadata.update(
+                        {
                             "chunk_index": i,
                             "total_chunks": len(chunks),
-                            "original_doc_id": doc.doc_id,
-                        },
+                            "original_doc_id": doc.doc_id
+                            or "",  # Ensure not None
+                        }
+                    )
+
+                    chunk_doc = Document(
+                        content=chunk.strip(),
+                        metadata=chunk_metadata,
                     )
                     processed_docs.append(chunk_doc)
         return processed_docs
