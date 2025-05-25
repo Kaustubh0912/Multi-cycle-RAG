@@ -6,7 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "azure-ai-inference>=1.0.0b9",
+    "chromadb>=1.0.10",
     "dotenv>=0.9.9",
+    "llama-index>=0.12.37",
+    "numpy>=2.2.6",
     "pydantic>=2.11.5",
     "pydantic-settings>=2.9.1",
     "sentence-transformers>=4.1.0",

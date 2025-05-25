@@ -38,12 +38,12 @@ class VectorStoreInterface(ABC):
     """ABstract base class for all vector store implementations"""
 
     @abstractmethod
-    async def add_documents(self, documents: List[Document]):
+    async def add_documents(self, documents: List[Document]) -> List[str]:
         """Add documents and return their IDs"""
         pass
 
     @abstractmethod
-    async def similarity_search(self, query: str, k: int = 5):
+    async def similarity_search(self, query: str, k: int = 5) -> List[Document]:
         """Search for similar documents"""
         pass
 
