@@ -1,239 +1,371 @@
-# RAG Engine with GitHub Models
+# Advanced RAG Engine with Query Decomposition
 
-A production-ready Retrieval Augmented Generation (RAG) system built with GitHub Models, featuring modular architecture, async support, and enterprise-grade capabilities.
+A production-ready Retrieval Augmented Generation (RAG) system featuring intelligent query decomposition, streaming responses, and enterprise-grade architecture. Built with GitHub Models for seamless AI integration and designed for complex, multi-step reasoning.
 
+## ✨ Key Features
 
-
-- **GitHub Models Integration**: Seamless integration with 40+ AI models including OpenAI, Meta, and DeepSeek
-- **Modular Architecture**: Clean, extensible design with abstract interfaces
-- **Async Support**: Built from the ground up with async/await patterns
-- **Smart Document Processing**: Intelligent chunking with recursive text splitting
-- **Vector Search**: ChromaDB integration with hybrid search capabilities
-- **HuggingFace Embeddings**: Optimized sentence transformers with torch compilation
-- **Enterprise Ready**: Comprehensive error handling, logging, and configuration management
-- **Zero Infrastructure**: No complex setup required - just your GitHub token
+- **🧠 Intelligent Query Decomposition**: Automatically breaks complex questions into focused sub-queries for comprehensive answers
+- **⚡ Real-time Streaming**: Perplexity-style streaming responses with live progress indicators
+- **🔧 Modular Architecture**: Clean, extensible design with dependency injection and abstract interfaces
+- **🚀 Async-First**: Built from the ground up with async/await patterns for optimal performance
+- **🎯 Context-Aware**: Multi-turn conversation support with intelligent context management
+- **📊 Rich CLI Interface**: Beautiful interactive terminal with progress bars and visual feedback
+- **🔍 Advanced Retrieval**: ChromaDB integration with semantic similarity search
+- **🤖 GitHub Models**: Access to 40+ state-of-the-art AI models including GPT-4, Llama, and Cohere
+- **📈 Enterprise Ready**: Comprehensive error handling, logging, and configuration management
 
 ## 🏗️ Architecture
 
 ```
 src/
-├── config/          # Application settings and environment management
-├── core/            # Abstract interfaces and base classes
-├── data/            # Document loading and processing
-├── embeddings/      # HuggingFace embedding implementations
-├── llm/             # GitHub Models LLM interface
-├── rag/             # Main RAG engine orchestration
-└── vectorstore/     # ChromaDB vector storage
+├── config/              # Application settings and environment management
+├── core/                # Abstract interfaces and base classes
+│   ├── interfaces.py    # Core abstractions for modularity
+│   └── exceptions.py    # Custom exception hierarchy
+├── data/                # Document loading and intelligent processing
+│   ├── loader.py        # Multi-format document ingestion
+│   └── processor.py     # Smart chunking with overlap handling
+├── decomposition/       # Query decomposition engine
+│   └── query_decomposer.py  # Smart and context-aware decomposers
+├── embeddings/          # HuggingFace embedding implementations
+│   └── huggingface_embeddings.py  # Optimized sentence transformers
+├── llm/                 # GitHub Models LLM interface
+│   └── github_llm.py    # Streaming-first LLM implementation
+├── rag/                 # Advanced RAG engine orchestration
+│   └── engine.py        # Main engine with decomposition support
+└── vectorstore/         # ChromaDB vector storage
+    └── chroma_store.py  # Production-ready vector operations
 ```
 
 ## 📋 Prerequisites
 
-- Python 3.13+
-- UV package manager
-- GitHub Personal Access Token with Models access
+- **Python 3.13+**
+- **UV package manager** (recommended) or pip
+- **GitHub Personal Access Token** with Models access
+- **8GB+ RAM** (recommended for optimal performance)
 
 ## ⚡ Quick Start
 
-### 1. Clone the Repository
+### 1. Setup Environment
 
 ```bash
-git clone https://github.com/cloaky233/rag_new.git
+# Clone the repository
+git clone https://github.com/cloaky233/rag_new
 cd rag_new
-```
 
-### 2. Setup Environment
-
-```bash
-# Create virtual environment
+# Create and activate virtual environment
 uv venv
-
-# Activate environment (Windows)
-.venv\Scripts\activate
-# Or on macOS/Linux
-source .venv/bin/activate
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
 
 # Install dependencies
 uv sync
 ```
 
-### 3. Configure Environment
+### 2. Configure Environment
 
 Create a `.env` file in the project root:
 
 ```env
+# Required: GitHub Models Configuration
 GITHUB_TOKEN=your_github_pat_token_here
+
+# LLM Configuration
 LLM_MODEL=meta/Meta-Llama-3.1-405B-Instruct
-LLM_TEMPERATURE=0.4
-LLM_MAX_TOKENS=10000
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=1000
+
+# Query Decomposition Settings
+ENABLE_QUERY_DECOMPOSITION=true
+USE_CONTEXT_AWARE_DECOMPOSER=true
+DECOMPOSITION_TEMPERATURE=0.3
+MAX_SUB_QUERIES=5
+
+# Vector Store Configuration
 VECTOR_STORE_TYPE=chroma
 CHROMA_PERSIST_DIRECTORY=./chroma_db
 CHROMA_COLLECTION_NAME=rag_collection
-EMBEDDING_MODEL=all-MiniLM-L6-v2
+
+# Embedding Configuration
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 EMBEDDING_DEVICE=cpu
-RETRIEVAL_K=15
+
+# RAG Configuration
+RETRIEVAL_K=5
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
+
+# Logging
 LOG_LEVEL=INFO
 ```
 
-### 4. Run the Application
+### 3. Prepare Your Documents
+
+```bash
+# Create a documents folder
+mkdir docs
+
+# Add your documents (supports .txt, .md, .pdf, .docx, .html)
+# Example:
+echo "Your knowledge base content here..." > docs/sample.txt
+```
+
+### 4. Launch Interactive Chat
+
+```bash
+# Start the interactive RAG chat
+python rag.py chat
+
+# Or with custom document path
+python rag.py chat /path/to/your/documents
+
+# View demo questions
+python rag.py demo
+```
+
+## 🎯 Usage Examples
+
+### Interactive Chat Experience
+
+The system provides a rich, interactive experience similar to Perplexity AI:
+
+```bash
+$ python rag.py chat
+
+🤖 Interactive RAG Assistant
+
+Ask complex questions and I'll break them down for comprehensive answers!
+Type 'exit' to quit, 'help' for commands
+
+💬 Your Question: What are the benefits and risks of artificial intelligence?
+
+🤔 Analyzing your question...
+🔧 Breaking down into 3 focused questions:
+   1. What are the main benefits of artificial intelligence?
+   2. What are the primary risks and concerns with artificial intelligence?
+   3. How do the benefits and risks of AI compare in different domains?
+
+🔍 Researching: What are the main benefits of artificial intelligence?...
+🔍 Researching: What are the primary risks and concerns with artificial intelligence?...
+🔍 Researching: How do the benefits and risks of AI compare in different domains?...
+
+📚 Research Complete!
+🧠 Synthesizing comprehensive answer...
+
+🎯 Final Answer:
+[Streaming response appears here in real-time...]
+
+📊 Used 3 research steps • 15 total sources
+```
+
+### Programmatic Usage
 
 ```python
 import asyncio
-from src import RAGEngine
+from src import AdvancedRAGEngine
 
 async def main():
-    # Initialize RAG engine
-    rag = RAGEngine()
-
+    # Initialize the advanced RAG engine
+    rag = AdvancedRAGEngine(use_context_aware_decomposer=True)
+    
     # Ingest documents
-    doc_count = await rag.ingest_documents("./your_documents_folder")
-    print(f"Ingested {doc_count} documents")
-
-    # Query the system
-    result = await rag.query("What is the main topic of the documents?")
-    print(f"Answer: {result.response}")
-    print(f"Sources: {len(result.source_documents)}")
+    doc_count = await rag.ingest_documents("./docs")
+    print(f"✅ Ingested {doc_count} document chunks")
+    
+    # Stream a complex query with decomposition
+    question = "Compare machine learning and deep learning approaches"
+    
+    print("🤖 Assistant: ", end="", flush=True)
+    async for chunk in rag.query_with_decomposition_stream(question):
+        if chunk.content:
+            print(chunk.content, end="", flush=True)
+        
+        # Access metadata from the first chunk
+        if chunk.metadata:
+            print(f"\n📊 Decomposed into {chunk.metadata.get('num_sub_queries', 0)} sub-queries")
+    
+    print()  # New line after completion
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## 🔧 Configuration
-
-The application uses Pydantic settings for configuration management. All settings can be configured via environment variables:
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub Personal Access Token | Required |
-| `LLM_MODEL` | GitHub Models model identifier | `cohere/Cohere-command-r` |
-| `LLM_TEMPERATURE` | Model temperature for generation | `0.7` |
-| `LLM_MAX_TOKENS` | Maximum tokens per response | `1000` |
-| `RETRIEVAL_K` | Number of documents to retrieve | `5` |
-| `CHUNK_SIZE` | Document chunk size in characters | `1000` |
-| `CHUNK_OVERLAP` | Overlap between chunks | `200` |
-| `EMBEDDING_MODEL` | HuggingFace embedding model | `BAAI/bge-small-en-v1.5` |
-
-## 🔍 Usage Examples
-
-### Basic RAG Query
+### Simple Streaming Query
 
 ```python
-from src import RAGEngine
-
-async def example_query():
-    rag = RAGEngine()
-
-    # Ingest documents from a directory
+async def simple_example():
+    rag = AdvancedRAGEngine()
     await rag.ingest_documents("./docs")
-
-    # Ask questions about your documents
-    result = await rag.query("How do I configure the system?")
-
-    print(f"Answer: {result.response}")
-    for i, doc in enumerate(result.source_documents):
-        print(f"Source {i+1}: {doc.metadata.get('source', 'Unknown')}")
+    
+    # For simple questions, decomposition is automatically skipped
+    async for chunk in rag.query_stream("What is machine learning?"):
+        print(chunk.content, end="", flush=True)
 ```
 
-### Custom LLM Configuration
+## 🧠 Query Decomposition
 
-```python
-from src.llm import GitHubLLM
-from src import RAGEngine
+The system intelligently determines when to decompose queries based on:
 
-async def custom_llm_example():
-    # Create custom LLM with specific settings
-    llm = GitHubLLM()
+- **Complexity indicators**: "and", "or", "compare", "benefits and risks"
+- **Multiple questions**: Queries with multiple question marks
+- **Conjunctions**: Multiple "and", "or", "but" statements
+- **Length**: Queries longer than 15 words
 
-    # Initialize RAG with custom LLM
-    rag = RAGEngine(llm=llm)
+### Decomposition Examples
 
-    # Use with custom parameters
-    result = await rag.query(
-        "Explain the architecture",
-        k=10  # Retrieve more documents
-    )
+| Original Query | Decomposed Sub-queries |
+|----------------|----------------------|
+| "What are the benefits and risks of solar energy?" | 1. What are the main benefits of solar energy?2. What are the primary risks of solar energy? |
+| "Compare supervised and unsupervised learning" | 1. What is supervised learning and how does it work?2. What is unsupervised learning and how does it work?3. What are the key differences between supervised and unsupervised learning? |
+
+## 🔧 Configuration Options
+
+### LLM Models
+
+Choose from 40+ available models:
+
+```env
+# High-performance models
+LLM_MODEL=meta/Meta-Llama-3.1-405B-Instruct
+LLM_MODEL=openai/gpt-4o
+LLM_MODEL=cohere/Cohere-command-r-plus
+
+# Efficient models
+LLM_MODEL=meta/Meta-Llama-3.1-8B-Instruct
+LLM_MODEL=microsoft/Phi-3-medium-4k-instruct
 ```
 
-### Document Processing
+### Embedding Models
 
-```python
-from src.data import DocumentLoader, DocumentProcessor
+Optimize for your use case:
 
-async def process_documents():
-    loader = DocumentLoader()
-    processor = DocumentProcessor()
+```env
+# Balanced performance
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
-    # Load documents
-    documents = await loader.load_from_directory("./my_docs")
+# High quality (larger)
+EMBEDDING_MODEL=BAAI/bge-large-en-v1.5
 
-    # Process with chunking
-    processed = await processor.process_documents(documents)
-
-    print(f"Original: {len(documents)} docs")
-    print(f"Processed: {len(processed)} chunks")
+# Multilingual support
+EMBEDDING_MODEL=BAAI/bge-m3
 ```
 
-## 🧪 Available Models
+### Advanced Settings
 
-The system supports 40+ models from GitHub Models including:
+```env
+# Query decomposition tuning
+DECOMPOSITION_TEMPERATURE=0.3        # Lower = more consistent decomposition
+MAX_SUB_QUERIES=5                    # Maximum sub-queries per decomposition
+MIN_QUERY_LENGTH_FOR_DECOMPOSITION=15
 
-- **OpenAI**: GPT-4o, GPT-4o-mini
-- **Meta**: Llama 3.1 (8B, 70B, 405B)
-- **Microsoft**: Phi-3 series
-- **Cohere**: Command R, Command R+
-- **DeepSeek**: DeepSeek-V2
+# Retrieval optimization
+RETRIEVAL_K=5                        # Documents per sub-query
+CHUNK_SIZE=1000                      # Characters per chunk
+CHUNK_OVERLAP=200                    # Overlap between chunks
+
+# Performance tuning
+EMBEDDING_DEVICE=cuda                # Use GPU if available
+```
 
 ## 🛠️ Development
 
-### Project Structure
+### Adding Custom Components
 
+The modular architecture supports easy extension:
+
+#### Custom LLM Provider
+
+```python
+from src.core.interfaces import LLMInterface, StreamingChunk
+from typing_extensions import AsyncIterator
+
+class CustomLLM(LLMInterface):
+    async def generate_stream(self, prompt: str, **kwargs) -> AsyncIterator[StreamingChunk]:
+        # Your implementation here
+        yield StreamingChunk(content="Hello", is_complete=False)
+        yield StreamingChunk(content=" World!", is_complete=True)
+    
+    async def chat_stream(self, messages: list, **kwargs) -> AsyncIterator[StreamingChunk]:
+        # Your chat implementation
+        pass
+
+# Use in RAG engine
+rag = AdvancedRAGEngine(llm=CustomLLM())
 ```
-rag_new/
-├── .venv/              # Virtual environment
-├── chroma_db/          # Vector database storage
-├── docs/               # Documentation
-├── src/                # Source code
-│   ├── config/         # Configuration management
-│   ├── core/           # Core interfaces and exceptions
-│   ├── data/           # Document loading and processing
-│   ├── embeddings/     # Embedding implementations
-│   ├── llm/            # Language model interfaces
-│   ├── rag/            # Main RAG engine
-│   └── vectorstore/    # Vector storage implementations
-├── .env                # Environment variables
-├── .gitignore          # Git ignore rules
-├── .python-version     # Python version specification
-├── pyproject.toml      # Project configuration
-├── README.md           # This file
-├── test_rag.py         # Test script
-└── uv.lock             # Dependency lock file
+
+#### Custom Query Decomposer
+
+```python
+from src.core.interfaces import QueryDecomposerInterface
+
+class CustomDecomposer(QueryDecomposerInterface):
+    async def should_decompose(self, query: str) -> bool:
+        # Your logic here
+        return len(query.split()) > 10
+    
+    async def decompose_query(self, query: str, context=None) -> list[str]:
+        # Your decomposition logic
+        return [query]  # Fallback to original
+
+# Use in RAG engine
+rag = AdvancedRAGEngine(query_decomposer=CustomDecomposer())
 ```
-
-### Adding New Components
-
-The modular architecture makes it easy to extend:
-
-1. **New LLM Provider**: Implement `LLMInterface`
-2. **New Vector Store**: Implement `VectorStoreInterface`
-3. **New Embeddings**: Implement `EmbeddingInterface`
 
 ### Testing
 
 ```bash
-# Run the test script
-python test_rag.py
+# Run interactive tests
+python rag.py chat
+
+# Test with demo questions
+python rag.py demo
+
+# Custom document path
+python rag.py chat /path/to/test/docs --verbose
 ```
+
+## 📊 Performance Optimization
+
+### Hardware Recommendations
+
+- **CPU**: 4+ cores recommended for concurrent processing
+- **RAM**: 8GB+ for large document collections
+- **GPU**: Optional, set `EMBEDDING_DEVICE=cuda` if available
+- **Storage**: SSD recommended for ChromaDB performance
+
+### Scaling Tips
+
+1. **Batch Size**: Adjust embedding batch size for your hardware
+2. **Chunk Strategy**: Optimize chunk size/overlap for your content
+3. **Model Selection**: Balance quality vs. speed based on use case
+4. **Retrieval K**: Higher K values provide more context but slower processing
 
 ## 🤝 Contributing
 
-We welcome contributions! Please follow these steps:
+We welcome contributions! Areas for improvement:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- **New LLM Providers**: OpenAI, Anthropic, local models
+- **Vector Stores**: Pinecone, Weaviate, Qdrant integration
+- **Document Loaders**: Additional format support
+- **Query Strategies**: Hybrid search, re-ranking
+- **UI Improvements**: Web interface, better visualizations
+
+### Development Setup
+
+```bash
+# Install development dependencies
+uv sync --dev
+
+# Run type checking
+mypy src/
+
+# Format code
+black src/
+isort src/
+
+# Run tests
+pytest tests/
+```
 
 ## 📄 License
 
@@ -241,17 +373,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- Built with [GitHub Models](https://github.com/features/models) for seamless AI integration
-- Powered by [Azure AI Inference](https://azure.microsoft.com/en-us/products/ai-services/) for enterprise-grade reliability
-- Uses [ChromaDB](https://www.trychroma.com/) for efficient vector storage
-- Dependency management by [UV](https://github.com/astral-sh/uv) for lightning-fast operations
+- **GitHub Models** for providing access to state-of-the-art AI models
+- **ChromaDB** for efficient vector storage and retrieval
+- **HuggingFace** for excellent embedding models and transformers
+- **Rich** for beautiful terminal interfaces
+- **UV** for lightning-fast dependency management
 
 ## 📞 Support
 
-- **Creator**: Lay Sheth ([@cloaky233](https://github.com/cloaky233))
 - **Issues**: [GitHub Issues](https://github.com/cloaky233/rag_new/issues)
 - **Documentation**: [GitHub Models Documentation](https://docs.github.com/en/github-models)
+- **Community**: Join our discussions for help and feature requests
 
 ---
 
-**Built with ❤️ using GitHub Models**
+**Built with ❤️ for intelligent document understanding and complex reasoning**
+
+---
+
