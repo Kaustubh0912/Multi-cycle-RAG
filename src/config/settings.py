@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.7)
     llm_max_tokens: int = Field(default=1000)
 
+    # Query Decomposition Configuration
+    enable_query_decomposition: bool = Field(default=True)
+    use_context_aware_decomposer: bool = Field(default=True)
+    decomposition_temperature: float = Field(default=0.3)
+    max_sub_queries: int = Field(default=5)
+    min_query_length_for_decomposition: int = Field(default=15)
+
     # Streaming configuration
     enable_streaming: bool = Field(default=True)
     steam_include_usage: bool = Field(default=True)
