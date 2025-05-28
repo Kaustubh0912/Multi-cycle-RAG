@@ -1,10 +1,11 @@
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 from ..config.settings import settings
 from ..core.interfaces import (
     Document,
     LLMInterface,
     QueryResult,
+    StreamingChunk,
     VectorStoreInterface,
 )
 from ..data.loader import DocumentLoader
@@ -14,7 +15,7 @@ from ..vectorstore.chroma_store import ChromaVectorStore
 
 
 class RAGEngine:
-    """Modular RAG engine"""
+    """Modular RAG engine with streaming support"""
 
     def __init__(
         self,
@@ -45,7 +46,7 @@ class RAGEngine:
     async def query(
         self, question: str, k: Optional[int] = None
     ) -> QueryResult:
-        """Query the RAG System"""
+        """Query the RAG System (non-streaming)"""
         k = k or settings.retrieval_k
 
         # Retrieve relevant documents
@@ -63,6 +64,37 @@ class RAGEngine:
             source_documents=relevant_docs,
             metadata={"num_sources": len(relevant_docs), "query": question},
         )
+
+    async def query_stream(
+        self, question: str, k: Optional[int] = None
+    ) -> AsyncIterator[StreamingChunk]:
+        """🔥 NEW: Query the RAG system with streaming response"""
+        k = k or settings.retrieval_k
+
+        # Retrieve relevant documents
+        relevant_docs = await self.vector_store.similarity_search(question, k=k)
+
+        # Prepare context
+        context = self._prepare_context(relevant_docs)
+
+        # Generate Response with streaming
+        prompt = self._create_prompt(question, context)
+
+        # Stream the response
+        async for chunk in self.llm.generate_stream(prompt):
+            # You can add source documents info to the first chunk
+            if chunk.content and not hasattr(self, "_sources_sent"):
+                chunk.metadata = {
+                    "num_sources": len(relevant_docs),
+                    "query": question,
+                    "source_documents": relevant_docs,
+                }
+                self._sources_sent = True
+            yield chunk
+
+        # Clean up the flag for next query
+        if hasattr(self, "_sources_sent"):
+            delattr(self, "_sources_sent")
 
     def _prepare_context(self, documents: List[Document]) -> str:
         context_parts = []
@@ -86,7 +118,7 @@ class RAGEngine:
         Question:{question}
 
         Instructions:
-        - Answer based brimarily on provided context
+        - Answer based primarily on provided context
         - if the context doesn't contain enough information, say so
         - Cite sources when possible
         - Be concise but thorough

@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from typing_extensions import AsyncIterator
+
 
 @dataclass
 class Document:
@@ -21,6 +23,16 @@ class QueryResult:
     metadata: Dict[str, Any]
 
 
+@dataclass
+class StreamingChunk:
+    """Streaming Response Chunk"""
+
+    content: str
+    is_complete: bool = False
+    usage_info: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class LLMInterface(ABC):
     """Abstract base class for all LLM implementations"""
 
@@ -31,6 +43,20 @@ class LLMInterface(ABC):
     @abstractmethod
     async def chat(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
         """Chat-style interaction"""
+        pass
+
+    @abstractmethod
+    def generate_stream(
+        self, prompt: str, **kwargs: Any
+    ) -> AsyncIterator[StreamingChunk]:
+        """Generate text from prompt with streaming"""
+        pass
+
+    @abstractmethod
+    def chat_stream(
+        self, messages: list[Dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[StreamingChunk]:
+        """Chat-style interaction with streaming"""
         pass
 
 

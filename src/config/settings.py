@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.7)
     llm_max_tokens: int = Field(default=1000)
 
+    # Streaming configuration
+    enable_streaming: bool = Field(default=True)
+    steam_include_usage: bool = Field(default=True)
+
     # database configuration
     vector_store_type: str = Field(default="chroma")
     chroma_persist_directory: str = Field(default="./chroma_db")
