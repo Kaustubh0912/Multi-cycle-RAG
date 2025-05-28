@@ -15,15 +15,6 @@ class Document:
 
 
 @dataclass
-class QueryResult:
-    "Standard query result format"
-
-    response: str
-    source_documents: List[Document]
-    metadata: Dict[str, Any]
-
-
-@dataclass
 class StreamingChunk:
     """Streaming Response Chunk"""
 
@@ -68,15 +59,6 @@ class DecomposedQuery:
 
 class LLMInterface(ABC):
     """Abstract base class for all LLM implementations"""
-
-    @abstractmethod
-    async def generate(self, prompt: str, **kwargs: Any) -> str:
-        pass
-
-    @abstractmethod
-    async def chat(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
-        """Chat-style interaction"""
-        pass
 
     @abstractmethod
     def generate_stream(

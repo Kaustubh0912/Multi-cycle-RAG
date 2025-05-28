@@ -30,44 +30,6 @@ class GitHubLLM(LLMInterface):
         except Exception as e:
             raise LLMException(f"Failed to initialize GitHub LLM: {e}")
 
-    async def generate(self, prompt: str, **kwargs: Any) -> str:
-        """Generate text from a simple prompt"""
-        try:
-            response = self.client.complete(
-                messages=[UserMessage(prompt)],
-                model=self.model,
-                temperature=kwargs.get("temperature", self.temperature),
-                max_tokens=kwargs.get("max_tokens", self.max_tokens),
-                top_p=kwargs.get("top_p", 1.0),
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise LLMException(f"Generation failed: {e}")
-
-    async def chat(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
-        """Chat with structured messages"""
-        try:
-            # Convert our message format to Azure format
-            azure_messages = []
-            for msg in messages:
-                if msg["role"] == "system":
-                    azure_messages.append(SystemMessage(msg["content"]))
-                elif msg["role"] == "user":
-                    azure_messages.append(UserMessage(msg["content"]))
-                elif msg["role"] == "assistant":
-                    azure_messages.append(AssistantMessage(msg["content"]))
-
-            response = self.client.complete(
-                messages=azure_messages,
-                model=self.model,
-                temperature=kwargs.get("temperature", self.temperature),
-                max_tokens=kwargs.get("max_tokens", self.max_tokens),
-                top_p=kwargs.get("top_p", 1.0),
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise LLMException(f"Chat failed: {e}")
-
     async def generate_stream(
         self, prompt: str, **kwargs: Any
     ) -> AsyncIterator[StreamingChunk]:
@@ -87,11 +49,9 @@ class GitHubLLM(LLMInterface):
                 usage_info = None
                 is_complete = False
 
-                # Extract content from the update
                 if update.choices and update.choices[0].delta:
                     chunk_content = update.choices[0].delta.content or ""
 
-                # Extract usage information (if available)
                 if update.usage:
                     usage_info = {
                         "completion_tokens": getattr(
@@ -104,7 +64,7 @@ class GitHubLLM(LLMInterface):
                             update.usage, "total_tokens", 0
                         ),
                     }
-                    is_complete = True  # Usage info usually comes at the end
+                    is_complete = True
 
                 yield StreamingChunk(
                     content=chunk_content,
@@ -119,7 +79,6 @@ class GitHubLLM(LLMInterface):
     ) -> AsyncIterator[StreamingChunk]:
         """Chat with streaming responses"""
         try:
-            # Convert our messages to Azure Format
             azure_messages = []
             for msg in messages:
                 if msg["role"] == "system":
@@ -144,11 +103,9 @@ class GitHubLLM(LLMInterface):
                 usage_info = None
                 is_complete = False
 
-                # Extract content from the update
                 if update.choices and update.choices[0].delta:
                     chunk_content = update.choices[0].delta.content or ""
 
-                # Extract usage information (if available)
                 if update.usage:
                     usage_info = {
                         "completion_tokens": getattr(

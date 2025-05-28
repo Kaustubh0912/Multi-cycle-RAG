@@ -11,7 +11,6 @@ class SmartQueryDecomposer(QueryDecomposerInterface):
     def __init__(self, llm: Optional[LLMInterface] = None):
         self.llm = llm or GitHubLLM()
 
-        # Keywords that suggest complex queries needing decomposition
         self.complexity_indicators = [
             "and",
             "or",
@@ -40,28 +39,24 @@ class SmartQueryDecomposer(QueryDecomposerInterface):
         """Determine if a query needs decomposition using smart heuristics"""
         query_lower = query.lower()
 
-        # Check for complexity indicators
         complexity_score = sum(
             1
             for indicator in self.complexity_indicators
             if indicator in query_lower
         )
 
-        # Check for multiple question marks or conjunctions
         question_marks = query.count("?")
         conjunctions = len(
             re.findall(r"\b(and|or|but|while|whereas)\b", query_lower)
         )
 
-        # Check query length (longer queries often benifit from decomposition)
         word_count = len(query.split())
 
-        # Scoring system
         should_decompose = (
-            complexity_score >= 2  # Multiple complexity indicators
-            or question_marks > 1  # Multiple questions
-            or conjunctions >= 2  # Multiple conjunctions
-            or word_count > 15  # Long query
+            complexity_score >= 2
+            or question_marks > 1
+            or conjunctions >= 2
+            or word_count > 15
         )
 
         return should_decompose
@@ -71,19 +66,21 @@ class SmartQueryDecomposer(QueryDecomposerInterface):
     ) -> List[str]:
         """Decompose a complex query into more focused sub-queries"""
 
-        # First check if decomposition is needed
         if not await self.should_decompose(query):
-            return [query]  # Return original query if no decomposition needed
+            return [query]
 
         decomposition_prompt = self._create_decomposition_prompt(query, context)
 
         try:
-            response = await self.llm.generate(
+            response_chunks = []
+            async for chunk in self.llm.generate_stream(
                 decomposition_prompt, temperature=0.3
-            )
+            ):
+                response_chunks.append(chunk.content)
+
+            response = "".join(response_chunks)
             sub_queries = self._parse_sub_queries(response)
 
-            # Ensure we have valid sub-queries
             if not sub_queries or len(sub_queries) == 1:
                 return [query]
             return sub_queries
@@ -134,11 +131,10 @@ class SmartQueryDecomposer(QueryDecomposerInterface):
         for line in lines:
             line = line.strip()
 
-            # Match numbered lines (1. 2. etc.)
             match = re.match(r"^\d+\.\s(.+)", line)
             if match:
                 sub_query = match.group(1).strip()
-                if sub_query and len(sub_query) > 5:  # Minimum length check
+                if sub_query and len(sub_query) > 5:
                     sub_queries.append(sub_query)
 
         return sub_queries
@@ -155,7 +151,6 @@ class ContextAwareDecomposer(SmartQueryDecomposer):
         """Add interaction to conversation history"""
         self.conversation_history.append({"query": query, "response": response})
 
-        # Keep only last 3 interactions to avoid context bloat
         if len(self.conversation_history) > 3:
             self.conversation_history = self.conversation_history[-3:]
 
@@ -164,16 +159,11 @@ class ContextAwareDecomposer(SmartQueryDecomposer):
     ) -> List[str]:
         """Context-aware decomposition using conversation history"""
 
-        # Build context from conversation history
         if self.conversation_history and not context:
             context_parts = []
-            for interaction in self.conversation_history[
-                -2:
-            ]:  # Last 2 interactions
+            for interaction in self.conversation_history[-2:]:
                 context_parts.append(f"Q: {interaction['query']}")
-                context_parts.append(
-                    f"A: {interaction['response'][:200]}..."
-                )  # Truncate long responses
+                context_parts.append(f"A: {interaction['response'][:200]}...")
 
             context = "\n".join(context_parts)
 
