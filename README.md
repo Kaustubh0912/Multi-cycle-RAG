@@ -113,14 +113,17 @@ echo "Your knowledge base content here..." > docs/sample.txt
 ### 4. Launch Interactive Chat
 
 ```bash
-# Start the interactive RAG chat
-python rag.py chat
+# Load your documents
+uv run python rag.py ingest
 
 # Or with custom document path
-python rag.py chat /path/to/your/documents
+uv run python rag.py ingest /path/to/your/documents
+
+# Start the interactive RAG chat
+uv run python rag.py
 
 # View demo questions
-python rag.py demo
+uv run python rag.py demo
 ```
 
 ## 🎯 Usage Examples
@@ -167,23 +170,23 @@ from src import AdvancedRAGEngine
 async def main():
     # Initialize the advanced RAG engine
     rag = AdvancedRAGEngine(use_context_aware_decomposer=True)
-    
+
     # Ingest documents
     doc_count = await rag.ingest_documents("./docs")
     print(f"✅ Ingested {doc_count} document chunks")
-    
+
     # Stream a complex query with decomposition
     question = "Compare machine learning and deep learning approaches"
-    
+
     print("🤖 Assistant: ", end="", flush=True)
     async for chunk in rag.query_with_decomposition_stream(question):
         if chunk.content:
             print(chunk.content, end="", flush=True)
-        
+
         # Access metadata from the first chunk
         if chunk.metadata:
             print(f"\n📊 Decomposed into {chunk.metadata.get('num_sub_queries', 0)} sub-queries")
-    
+
     print()  # New line after completion
 
 if __name__ == "__main__":
@@ -196,7 +199,7 @@ if __name__ == "__main__":
 async def simple_example():
     rag = AdvancedRAGEngine()
     await rag.ingest_documents("./docs")
-    
+
     # For simple questions, decomposition is automatically skipped
     async for chunk in rag.query_stream("What is machine learning?"):
         print(chunk.content, end="", flush=True)
@@ -284,7 +287,7 @@ class CustomLLM(LLMInterface):
         # Your implementation here
         yield StreamingChunk(content="Hello", is_complete=False)
         yield StreamingChunk(content=" World!", is_complete=True)
-    
+
     async def chat_stream(self, messages: list, **kwargs) -> AsyncIterator[StreamingChunk]:
         # Your chat implementation
         pass
@@ -302,7 +305,7 @@ class CustomDecomposer(QueryDecomposerInterface):
     async def should_decompose(self, query: str) -> bool:
         # Your logic here
         return len(query.split()) > 10
-    
+
     async def decompose_query(self, query: str, context=None) -> list[str]:
         # Your decomposition logic
         return [query]  # Fallback to original
@@ -390,4 +393,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built with ❤️ for intelligent document understanding and complex reasoning**
 
 ---
-

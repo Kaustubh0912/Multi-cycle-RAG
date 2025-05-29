@@ -23,23 +23,15 @@ class InteractiveRAGChat:
     def __init__(self, docs_path: str):
         self.rag = AdvancedRAGEngine(use_context_aware_decomposer=True)
         self.docs_path = docs_path
-        self.is_initialized = False
 
-    async def initialize(self):
-        """Initialize the RAG system with documents"""
-        if self.is_initialized:
-            return
-
-        with console.status("[bold cyan]Loading documents...", spinner="dots"):
-            try:
-                num_docs = await self.rag.ingest_documents(self.docs_path)
-                self.is_initialized = True
-                console.print(
-                    f"[green]✅ Loaded {num_docs} document chunks successfully![/green]"
-                )
-            except Exception as e:
-                console.print(f"[red]❌ Failed to load documents: {e}[/red]")
-                raise
+    async def check_documents_exist(self) -> bool:
+        """Check if documents have been ingested"""
+        try:
+            # Try a simple query to see if vector store has documents
+            results = await self.rag.vector_store.similarity_search("test", k=1)
+            return len(results) > 0
+        except Exception:
+            return False
 
     async def process_query_with_thinking(self, question: str):
         """Process query with perplexity-style thinking indicators"""
@@ -199,6 +191,17 @@ Comprehensive Answer:"""
     async def chat_loop(self):
         """Main interactive chat loop"""
 
+        # Check if documents exist
+        docs_exist = await self.check_documents_exist()
+        if not docs_exist:
+            console.print(
+                "[red]❌ No documents found in the knowledge base![/red]"
+            )
+            console.print(
+                "[yellow]💡 Run 'uv run python rag.py ingest' first to load documents.[/yellow]"
+            )
+            return
+
         # Welcome message
         welcome_panel = Panel.fit(
             "[bold cyan]🤖 Interactive RAG Assistant[/bold cyan]\n\n"
@@ -259,20 +262,54 @@ Comprehensive Answer:"""
 • Questions with multiple parts work best
 • Try: "What are the benefits and risks of X?"
 • Try: "Compare A and B, and explain the differences"
+
+[bold cyan]Need to add documents?[/bold cyan]
+• Run: [bold]uv run python rag.py ingest[/bold]
 """
         console.print(Panel(help_text, border_style="blue"))
 
 
-@app.command()
-def chat(
-    docs_path: str = typer.Argument(
-        "./docs", help="Path to documents directory"
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    docs_path: str = typer.Option(
+        "./docs", "--docs", "-d", help="Path to documents directory"
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
 ):
-    """Start interactive RAG chat session"""
+    """Interactive RAG Chat with Query Decomposition - Default: Start Chat"""
+
+    if ctx.invoked_subcommand is None:
+        # No subcommand was invoked, start chat directly
+        async def start_chat():
+            chat_instance = InteractiveRAGChat(docs_path)
+            try:
+                await chat_instance.chat_loop()
+            except Exception as e:
+                if verbose:
+                    console.print_exception()
+                else:
+                    console.print(f"[red]❌ Error: {e}[/red]")
+                raise typer.Exit(1)
+
+        try:
+            asyncio.run(start_chat())
+        except KeyboardInterrupt:
+            console.print("\n[bold red]👋 Goodbye![/bold red]")
+
+
+@app.command()
+def ingest(
+    docs_path: str = typer.Option(
+        "./docs", "--docs", "-d", help="Path to documents directory"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose output"
+    ),
+):
+    """Ingest documents into the knowledge base"""
 
     # Check if docs path exists
     if not Path(docs_path).exists():
@@ -282,29 +319,36 @@ def chat(
         )
         raise typer.Exit(1)
 
-    async def main():
-        chat_instance = InteractiveRAGChat(docs_path)
+    async def run_ingestion():
+        rag = AdvancedRAGEngine(use_context_aware_decomposer=True)
 
-        try:
-            await chat_instance.initialize()
-            await chat_instance.chat_loop()
-        except Exception as e:
-            if verbose:
-                console.print_exception()
-            else:
-                console.print(f"[red]❌ Error: {e}[/red]")
-            raise typer.Exit(1)
+        with console.status(
+            "[bold cyan]Ingesting documents...", spinner="dots"
+        ):
+            try:
+                num_docs = await rag.ingest_documents(docs_path)
+                console.print(
+                    f"[green]✅ Successfully ingested {num_docs} document chunks![/green]"
+                )
+                console.print(
+                    "[cyan]💡 You can now start chatting with: [bold]uv run python rag.py[/bold][/cyan]"
+                )
+            except Exception as e:
+                if verbose:
+                    console.print_exception()
+                else:
+                    console.print(f"[red]❌ Ingestion failed: {e}[/red]")
+                raise typer.Exit(1)
 
-    # Run the async chat
     try:
-        asyncio.run(main())
+        asyncio.run(run_ingestion())
     except KeyboardInterrupt:
-        console.print("\n[bold red]👋 Goodbye![/bold red]")
+        console.print("\n[red]❌ Ingestion cancelled![/red]")
 
 
 @app.command()
 def demo():
-    """Run a demo with sample questions"""
+    """Show demo questions for testing"""
 
     demo_questions = [
         "What are the benefits and risks of artificial intelligence?",
@@ -322,7 +366,7 @@ def demo():
         "\n[dim]Copy any question above and use it in chat mode![/dim]"
     )
     console.print(
-        "[yellow]💡 Run: python test_interactive_rag.py chat[/yellow]"
+        "[yellow]💡 Run: [bold]uv run python rag.py[/bold] to start chatting[/yellow]"
     )
 
 
