@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from azure.ai.inference import ChatCompletionsClient
 from azure.ai.inference.models import (
@@ -15,18 +15,24 @@ from ..core.interfaces import LLMInterface, StreamingChunk
 
 
 class GitHubLLM(LLMInterface):
-    """GitHub Models LLM implementation"""
+    """GitHub Models LLM implementation with override support"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        model_override: Optional[str] = None,
+        temperature_override: Optional[float] = None,
+        max_tokens_override: Optional[int] = None,
+    ) -> None:
         super().__init__()
         try:
             self.client = ChatCompletionsClient(
                 endpoint="https://models.github.ai/inference",
                 credential=AzureKeyCredential(settings.github_token),
             )
-            self.model = settings.llm_model
-            self.temperature = settings.llm_temperature
-            self.max_tokens = settings.llm_max_tokens
+            self.model = model_override or settings.llm_model
+            self.temperature = temperature_override or settings.llm_temperature
+            self.max_tokens = max_tokens_override or settings.llm_max_tokens
+
         except Exception as e:
             raise LLMException(f"Failed to initialize GitHub LLM: {e}")
 
