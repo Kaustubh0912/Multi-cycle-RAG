@@ -1,3 +1,4 @@
+# rag/rag.py
 import asyncio
 from pathlib import Path
 
@@ -11,363 +12,509 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
 )
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
+from rich.table import Table
 
+from src.config.settings import settings
 from src.rag.engine import AdvancedRAGEngine
 
-app = typer.Typer(help="Interactive RAG Chat with Query Decomposition")
+app = typer.Typer(
+    help="Interactive RAG Chat with Reflexion Loop and Query Decomposition"
+)
 console = Console()
 
 
 class InteractiveRAGChat:
-    def __init__(self, docs_path: str):
-        self.rag = AdvancedRAGEngine(use_context_aware_decomposer=True)
+    def __init__(self, docs_path: str, enable_reflexion: bool = True):
+        self.rag = AdvancedRAGEngine(enable_reflexion=enable_reflexion)
         self.docs_path = docs_path
+        self.enable_reflexion = enable_reflexion
+        self.query_count = 0
 
     async def check_documents_exist(self) -> bool:
         """Check if documents have been ingested"""
         try:
-            # Try a simple query to see if vector store has documents
             results = await self.rag.vector_store.similarity_search("test", k=1)
             return len(results) > 0
         except Exception:
             return False
 
     async def process_query_with_thinking(self, question: str):
-        """Process query with perplexity-style thinking indicators"""
+        """Process query with reflexion or decomposition"""
+        self.query_count += 1
 
-        # Step 1: Show decomposition thinking
-        with console.status(
-            "[bold yellow]🤔 Analyzing your question...", spinner="dots"
-        ):
-            await asyncio.sleep(1)
-            sub_query_texts = await self.rag.query_decomposer.decompose_query(
-                question
-            )
-
-        if len(sub_query_texts) == 1:
-            console.print(
-                "[dim]💭 Simple question detected, no decomposition needed[/dim]"
-            )
-            await self.stream_simple_answer(question)
-        else:
-            await self.process_decomposed_query(question, sub_query_texts)
-
-    async def process_decomposed_query(self, question: str, sub_queries: list):
-        """Process decomposed query with progress tracking"""
-
-        # Show decomposition results
-        console.print(
-            f"[bold blue]🔧 Breaking down into {len(sub_queries)} focused questions:[/bold blue]"
-        )
-        for i, sq in enumerate(sub_queries, 1):
-            console.print(f"   [dim]{i}.[/dim] {sq}")
-
+        console.print(f"\n[bold blue]Query #{self.query_count}[/bold blue]")
+        console.print(f"[dim]Question: {question}[/dim]")
         console.print()
 
-        # Create progress bar for sub-queries
-        progress_columns = (
+        if self.enable_reflexion:
+            await self.process_reflexion_query(question)
+        else:
+            await self.process_decomposition_query(question)
+
+    async def process_reflexion_query(self, question: str):
+        """Process query using reflexion loop"""
+
+        console.print(
+            "[bold blue]🔄 Activating Reflexion Loop Architecture[/bold blue]"
+        )
+
+        # Get engine info
+        engine_info = self.rag.get_engine_info()
+        console.print(
+            f"[dim]Max cycles: {engine_info.get('max_reflexion_cycles', 5)}[/dim]"
+        )
+        console.print(
+            f"[dim]Confidence threshold: {engine_info.get('confidence_threshold', 0.8)}[/dim]"
+        )
+        console.print(
+            f"[dim]Memory cache: {engine_info.get('memory_cache_enabled', False)}[/dim]"
+        )
+        console.print()
+
+        # Show real-time reflexion process
+        console.print("=" * 70)
+        console.print("[bold cyan]🤖 AI Reflexion Process[/bold cyan]")
+        console.print("=" * 70)
+
+        current_cycle = 0
+        response_text = ""
+
+        try:
+            async for chunk in self.rag.query_stream(question):
+                if chunk.content:
+                    # Check if this is a new cycle
+                    if chunk.metadata and chunk.metadata.get("cycle_number"):
+                        new_cycle = chunk.metadata["cycle_number"]
+                        if new_cycle != current_cycle:
+                            current_cycle = new_cycle
+                            if current_cycle > 1:
+                                console.print(
+                                    f"\n[bold yellow]🔄 Cycle {current_cycle}[/bold yellow]"
+                                )
+
+                    # Check for cached results
+                    if chunk.metadata and chunk.metadata.get("is_cached"):
+                        console.print(
+                            "[bold green]💾 [Cached Result][/bold green] ",
+                            end="",
+                        )
+
+                    console.print(chunk.content, end="", highlight=False)
+                    response_text += chunk.content
+
+                    # Show completion metadata
+                    if chunk.is_complete and chunk.metadata:
+                        console.print("\n" + "=" * 70)
+                        if chunk.metadata.get("reflexion_complete"):
+                            self._show_reflexion_stats(chunk.metadata)
+                        elif chunk.metadata.get("cached_result"):
+                            console.print(
+                                "[bold green]💾 Retrieved from cache[/bold green]"
+                            )
+                            console.print(
+                                f"[dim]Original cycles: {chunk.metadata.get('total_cycles', 0)}[/dim]"
+                            )
+                            console.print(
+                                f"[dim]Original processing time: {chunk.metadata.get('total_processing_time', 0):.2f}s[/dim]"
+                            )
+
+        except Exception as e:
+            console.print(f"\n[red]❌ Error during reflexion: {e}[/red]")
+            console.print("[yellow]Falling back to simple RAG mode...[/yellow]")
+
+    async def process_decomposition_query(self, question: str):
+        """Process query using query decomposition architecture"""
+        console.print(
+            "[bold magenta]🔧 Activating Query Decomposition Architecture[/bold magenta]"
+        )
+        console.print()
+
+        response_text = ""
+
+        try:
+            async for chunk in self.rag.query_stream(question):
+                if chunk.content:
+                    # Check for decomposition metadata
+                    if chunk.metadata and chunk.metadata.get(
+                        "decomposition_used"
+                    ):
+                        if not hasattr(self, "_decomp_info_shown"):
+                            self._show_decomposition_info(chunk.metadata)
+                            self._decomp_info_shown = True
+
+                    console.print(chunk.content, end="", highlight=False)
+                    response_text += chunk.content
+
+                    # Show completion metadata
+                    if chunk.is_complete and chunk.metadata:
+                        if chunk.metadata.get("decomposition_used"):
+                            console.print("\n" + "=" * 70)
+                            console.print(
+                                "[bold green]✅ Synthesis Complete![/bold green]"
+                            )
+                            console.print(
+                                f"[dim]📊 Sub-queries processed: {chunk.metadata.get('num_sub_queries', 0)}[/dim]"
+                            )
+                            console.print(
+                                f"[dim]📚 Total sources: {chunk.metadata.get('total_sources', 0)}[/dim]"
+                            )
+
+        except Exception as e:
+            console.print(f"\n[red]❌ Error during decomposition: {e}[/red]")
+
+        # Clean up temporary attributes
+        if hasattr(self, "_decomp_info_shown"):
+            delattr(self, "_decomp_info_shown")
+
+    def _show_reflexion_stats(self, metadata: dict):
+        """Show reflexion completion statistics"""
+        console.print("[bold green]✅ Reflexion Complete![/bold green]")
+
+        # Create stats table
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column("Metric", style="dim")
+        table.add_column("Value", style="bold")
+
+        table.add_row("📊 Total cycles:", str(metadata.get("total_cycles", 0)))
+        table.add_row(
+            "⏱️  Processing time:",
+            f"{metadata.get('total_processing_time', 0):.2f}s",
+        )
+        table.add_row(
+            "📚 Documents analyzed:", str(metadata.get("total_documents", 0))
+        )
+        table.add_row(
+            "🎯 Final confidence:", f"{metadata.get('final_confidence', 0):.2f}"
+        )
+        table.add_row(
+            "💾 Memory cached:", str(metadata.get("memory_cached", False))
+        )
+
+        console.print(table)
+
+    def _show_decomposition_info(self, metadata: dict):
+        """Show decomposition information"""
+        console.print("=" * 70)
+        console.print("[bold cyan]🔧 Query Decomposition Analysis[/bold cyan]")
+        console.print("=" * 70)
+
+        sub_queries = metadata.get("sub_queries", [])
+        if sub_queries:
+            console.print(
+                f"[bold]Decomposed into {len(sub_queries)} sub-queries:[/bold]"
+            )
+            for i, sq in enumerate(sub_queries, 1):
+                console.print(f"  {i}. [dim]{sq}[/dim]")
+            console.print()
+
+    async def ingest_documents(self):
+        """Ingest documents from the specified path"""
+        docs_path = Path(self.docs_path)
+        if not docs_path.exists():
+            console.print(
+                f"[red]❌ Error: Documents path '{self.docs_path}' does not exist.[/red]"
+            )
+            return False
+
+        console.print(
+            f"[bold green]📥 Ingesting documents from {self.docs_path}...[/bold green]"
+        )
+
+        # Show progress
+        with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Processing documents...", total=None)
+
+            try:
+                count = await self.rag.ingest_documents(self.docs_path)
+                progress.update(task, completed=100, total=100)
+                console.print(
+                    f"[bold green]✅ Successfully ingested {count} documents.[/bold green]"
+                )
+                return True
+            except Exception as e:
+                console.print(f"[red]❌ Error ingesting documents: {e}[/red]")
+                return False
+
+    async def show_engine_status(self):
+        """Show current engine configuration and status"""
+        console.print("\n[bold cyan]🔧 Engine Configuration[/bold cyan]")
+
+        engine_info = self.rag.get_engine_info()
+
+        # Create configuration table
+        config_table = Table(title="Current Configuration", show_header=True)
+        config_table.add_column("Setting", style="cyan")
+        config_table.add_column("Value", style="green")
+
+        config_table.add_row(
+            "Engine Type", engine_info.get("engine_type", "Unknown")
+        )
+        config_table.add_row(
+            "Reflexion Enabled",
+            str(engine_info.get("reflexion_enabled", False)),
         )
 
-        with Progress(*progress_columns) as progress:
-            task = progress.add_task(
-                "[cyan]Researching answers...", total=len(sub_queries)
+        if engine_info.get("reflexion_enabled"):
+            config_table.add_row(
+                "Max Reflexion Cycles",
+                str(engine_info.get("max_reflexion_cycles", 5)),
+            )
+            config_table.add_row(
+                "Confidence Threshold",
+                str(engine_info.get("confidence_threshold", 0.8)),
+            )
+            config_table.add_row(
+                "Memory Cache",
+                str(engine_info.get("memory_cache_enabled", False)),
+            )
+        else:
+            config_table.add_row(
+                "Decomposition Enabled",
+                str(engine_info.get("decomposition_enabled", False)),
+            )
+            config_table.add_row(
+                "Context Aware",
+                str(engine_info.get("context_aware_decomposer", False)),
             )
 
-            sub_query_results = []
+        console.print(config_table)
 
-            for i, sub_query in enumerate(sub_queries):
-                progress.update(
-                    task,
-                    description=f"[cyan]🔍 Researching: {sub_query[:50]}...",
+        # Show memory stats if available
+        if engine_info.get("memory_stats"):
+            memory_stats = engine_info["memory_stats"]
+            if not memory_stats.get("cache_disabled"):
+                console.print(
+                    "\n[bold cyan]💾 Memory Cache Statistics[/bold cyan]"
                 )
+                memory_table = Table(show_header=False)
+                memory_table.add_column("Metric", style="dim")
+                memory_table.add_column("Value", style="bold")
 
-                # Get answer for this sub-query
-                relevant_docs = await self.rag.vector_store.similarity_search(
-                    sub_query, k=5
+                memory_table.add_row(
+                    "Cache Size",
+                    f"{memory_stats.get('size', 0)}/{memory_stats.get('max_size', 0)}",
                 )
-                context = self.rag._prepare_context(relevant_docs)
-                prompt = self.rag._create_sub_query_prompt(sub_query, context)
-
-                answer_chunks = []
-                async for chunk in self.rag.llm.generate_stream(
-                    prompt, temperature=0.7
-                ):
-                    answer_chunks.append(chunk.content)
-
-                answer = "".join(answer_chunks)
-                sub_query_results.append(
-                    {
-                        "question": sub_query,
-                        "answer": answer,
-                        "sources": len(relevant_docs),
-                    }
+                memory_table.add_row(
+                    "Hit Rate", f"{memory_stats.get('hit_rate', 0):.2%}"
                 )
+                if memory_stats.get("oldest_entry"):
+                    memory_table.add_row(
+                        "Oldest Entry",
+                        f"{memory_stats.get('oldest_entry', 0):.1f}s ago",
+                    )
 
-                progress.advance(task)
-                await asyncio.sleep(0.5)  # Small delay for better UX
+                console.print(memory_table)
 
-        # Show research results
-        console.print("\n[bold green]📚 Research Complete![/bold green]")
-        for i, result in enumerate(sub_query_results, 1):
+    async def clear_cache(self):
+        """Clear memory cache if available"""
+        if hasattr(self.rag, "reflexion_engine"):
+            success = await self.rag.reflexion_engine.clear_memory_cache()
+            if success:
+                console.print(
+                    "[bold green]✅ Memory cache cleared successfully.[/bold green]"
+                )
+            else:
+                console.print(
+                    "[yellow]⚠️  Memory cache is disabled or unavailable.[/yellow]"
+                )
+        else:
             console.print(
-                f"[dim]{i}. {result['question'][:60]}... ({result['sources']} sources)[/dim]"
+                "[yellow]⚠️  Memory cache not available in current engine mode.[/yellow]"
             )
 
-        # Synthesize final answer
-        console.print(
-            "\n[bold magenta]🧠 Synthesizing comprehensive answer...[/bold magenta]"
+    async def interactive_menu(self):
+        """Show interactive menu for additional options"""
+        while True:
+            console.print("\n[bold cyan]📋 Additional Options[/bold cyan]")
+            console.print("1. Show engine status")
+            console.print("2. Clear memory cache")
+            console.print("3. Re-ingest documents")
+            console.print("4. Switch engine mode")
+            console.print("5. Return to chat")
+
+            choice = Prompt.ask(
+                "Select an option",
+                choices=["1", "2", "3", "4", "5"],
+                default="5",
+            )
+
+            if choice == "1":
+                await self.show_engine_status()
+            elif choice == "2":
+                await self.clear_cache()
+            elif choice == "3":
+                await self.ingest_documents()
+            elif choice == "4":
+                await self.switch_engine_mode()
+            elif choice == "5":
+                break
+
+    async def switch_engine_mode(self):
+        """Switch between reflexion and decomposition modes"""
+        current_mode = (
+            "Reflexion Loop" if self.enable_reflexion else "Query Decomposition"
         )
-        await self.stream_synthesized_answer(question, sub_query_results)
-
-    async def stream_synthesized_answer(self, question: str, sub_results: list):
-        """Stream the final synthesized answer"""
-
-        # Create synthesis prompt
-        qa_pairs = []
-        for result in sub_results:
-            qa_pairs.append(f"Q: {result['question']}\nA: {result['answer']}")
-
-        qa_context = "\n\n".join(qa_pairs)
-        synthesis_prompt = f"""You are an expert analyst providing a comprehensive answer.
-
-Original Question: {question}
-
-Research Results:
-{qa_context}
-
-Instructions:
-- Synthesize information from all research
-- Provide a comprehensive, well-structured response
-- Show logical connections between findings
-- Be thorough but clear and engaging
-
-Comprehensive Answer:"""
-
-        # Stream the answer with rich formatting
-        console.print("\n" + "=" * 60)
-        console.print("[bold cyan]🎯 Final Answer:[/bold cyan]\n")
-
-        response_text = ""
-        async for chunk in self.rag.llm.generate_stream(synthesis_prompt):
-            if chunk.content:
-                console.print(chunk.content, end="", highlight=False)
-                response_text += chunk.content
-
-        console.print("\n" + "=" * 60)
-
-        # Show metadata
-        total_sources = sum(r["sources"] for r in sub_results)
-        console.print(
-            f"[dim]📊 Used {len(sub_results)} research steps • {total_sources} total sources[/dim]"
+        new_mode = (
+            "Query Decomposition" if self.enable_reflexion else "Reflexion Loop"
         )
 
-    async def stream_simple_answer(self, question: str):
-        """Stream answer for simple questions"""
-
-        with console.status(
-            "[bold yellow]🔍 Searching knowledge base...", spinner="dots"
-        ):
-            relevant_docs = await self.rag.vector_store.similarity_search(
-                question, k=5
-            )
-            context = self.rag._prepare_context(relevant_docs)
-            prompt = self.rag._create_prompt(question, context)
-
-        console.print("\n" + "=" * 60)
-        console.print("[bold cyan]🎯 Answer:[/bold cyan]\n")
-
-        async for chunk in self.rag.llm.generate_stream(prompt):
-            if chunk.content:
-                console.print(chunk.content, end="", highlight=False)
-
-        console.print("\n" + "=" * 60)
-        console.print(f"[dim]📊 Used {len(relevant_docs)} sources[/dim]")
-
-    async def chat_loop(self):
-        """Main interactive chat loop"""
-
-        # Check if documents exist
-        docs_exist = await self.check_documents_exist()
-        if not docs_exist:
+        if Confirm.ask(f"Switch from {current_mode} to {new_mode}?"):
+            self.enable_reflexion = not self.enable_reflexion
+            self.rag = AdvancedRAGEngine(enable_reflexion=self.enable_reflexion)
             console.print(
-                "[red]❌ No documents found in the knowledge base![/red]"
+                f"[bold green]✅ Switched to {new_mode} mode.[/bold green]"
             )
-            console.print(
-                "[yellow]💡 Run 'uv run python rag.py ingest' first to load documents.[/yellow]"
-            )
-            return
+        else:
+            console.print("[dim]Mode unchanged.[/dim]")
+
+
+@app.command()
+def chat(
+    docs_path: str = typer.Option("./docs", help="Path to documents directory"),
+    reflexion: bool = typer.Option(
+        True, help="Enable reflexion loop architecture"
+    ),
+    ingest: bool = typer.Option(
+        False, help="Ingest documents before starting chat"
+    ),
+    force_ingest: bool = typer.Option(
+        False, help="Force re-ingestion even if documents exist"
+    ),
+):
+    """Run the interactive RAG chat application"""
+
+    async def app_main():
+        chat = InteractiveRAGChat(docs_path, enable_reflexion=reflexion)
 
         # Welcome message
-        welcome_panel = Panel.fit(
-            "[bold cyan]🤖 Interactive RAG Assistant[/bold cyan]\n\n"
-            "Ask complex questions and I'll break them down for comprehensive answers!\n"
-            "[dim]Type 'exit' to quit, 'help' for commands[/dim]",
-            border_style="cyan",
+        console.print(
+            Panel.fit(
+                "[bold cyan]🤖 Welcome to Advanced RAG Chat![/bold cyan]\n"
+                f"[dim]Engine: {'Reflexion Loop' if reflexion else 'Query Decomposition'}[/dim]\n"
+                f"[dim]Documents: {docs_path}[/dim]"
+            )
         )
-        console.print(welcome_panel)
-        console.print()
+
+        # Check if documents exist
+        docs_exist = await chat.check_documents_exist()
+
+        if force_ingest or ingest or not docs_exist:
+            if not docs_exist:
+                console.print(
+                    "[yellow]⚠️  No documents found in vector store.[/yellow]"
+                )
+            success = await chat.ingest_documents()
+            if not success:
+                console.print(
+                    "[red]❌ Cannot proceed without documents. Exiting.[/red]"
+                )
+                return
+        else:
+            console.print(
+                "[green]✅ Using existing documents in vector store.[/green]"
+            )
+
+        # Show initial engine status
+        await chat.show_engine_status()
+
+        # Main chat loop
+        console.print(
+            "\n[bold green]💬 Chat started! Type your questions below.[/bold green]"
+        )
+        console.print(
+            "[dim]Commands: 'exit' to quit, 'menu' for options, 'status' for engine info[/dim]"
+        )
 
         while True:
             try:
-                # Get user input with rich prompt
                 question = Prompt.ask(
-                    "[bold blue]💬 Your Question",
-                    default="",
-                    show_default=False,
-                ).strip()
+                    "\n[bold blue]❓ Your question[/bold blue]"
+                )
 
-                if not question:
-                    continue
-
-                if question.lower() in ["exit", "quit", "bye"]:
+                if question.strip().lower() in ["exit", "quit", "q"]:
                     console.print("[bold red]👋 Goodbye![/bold red]")
                     break
-
-                if question.lower() == "help":
-                    self.show_help()
+                elif question.strip().lower() == "menu":
+                    await chat.interactive_menu()
+                    continue
+                elif question.strip().lower() == "status":
+                    await chat.show_engine_status()
+                    continue
+                elif not question.strip():
+                    console.print(
+                        "[yellow]⚠️  Please enter a question.[/yellow]"
+                    )
                     continue
 
-                if question.lower() == "clear":
-                    console.clear()
-                    continue
-
-                # Process the question
-                console.print()
-                await self.process_query_with_thinking(question)
-                console.print("\n")
+                await chat.process_query_with_thinking(question)
 
             except KeyboardInterrupt:
-                console.print("\n[bold red]👋 Goodbye![/bold red]")
-                break
+                console.print(
+                    "\n[yellow]⚠️  Interrupted. Type 'exit' to quit properly.[/yellow]"
+                )
             except Exception as e:
-                console.print(f"[red]❌ Error: {e}[/red]")
+                console.print(f"\n[red]❌ Unexpected error: {e}[/red]")
 
-    def show_help(self):
-        """Show help information"""
-        help_text = """
-[bold cyan]Available Commands:[/bold cyan]
-
-• [bold]help[/bold] - Show this help message
-• [bold]clear[/bold] - Clear the screen
-• [bold]exit/quit/bye[/bold] - Exit the chat
-
-[bold cyan]Tips:[/bold cyan]
-
-• Ask complex questions for automatic decomposition
-• Questions with multiple parts work best
-• Try: "What are the benefits and risks of X?"
-• Try: "Compare A and B, and explain the differences"
-
-[bold cyan]Need to add documents?[/bold cyan]
-• Run: [bold]uv run python rag.py ingest[/bold]
-"""
-        console.print(Panel(help_text, border_style="blue"))
-
-
-@app.callback(invoke_without_command=True)
-def main(
-    ctx: typer.Context,
-    docs_path: str = typer.Option(
-        "./docs", "--docs", "-d", help="Path to documents directory"
-    ),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose output"
-    ),
-):
-    """Interactive RAG Chat with Query Decomposition - Default: Start Chat"""
-
-    if ctx.invoked_subcommand is None:
-        # No subcommand was invoked, start chat directly
-        async def start_chat():
-            chat_instance = InteractiveRAGChat(docs_path)
-            try:
-                await chat_instance.chat_loop()
-            except Exception as e:
-                if verbose:
-                    console.print_exception()
-                else:
-                    console.print(f"[red]❌ Error: {e}[/red]")
-                raise typer.Exit(1)
-
-        try:
-            asyncio.run(start_chat())
-        except KeyboardInterrupt:
-            console.print("\n[bold red]👋 Goodbye![/bold red]")
+    asyncio.run(app_main())
 
 
 @app.command()
 def ingest(
-    docs_path: str = typer.Option(
-        "./docs", "--docs", "-d", help="Path to documents directory"
-    ),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose output"
-    ),
+    docs_path: str = typer.Option("./docs", help="Path to documents directory"),
+    reflexion: bool = typer.Option(True, help="Engine mode for ingestion"),
 ):
-    """Ingest documents into the knowledge base"""
+    """Ingest documents into the vector store"""
 
-    # Check if docs path exists
-    if not Path(docs_path).exists():
-        console.print(f"[red]❌ Documents path '{docs_path}' not found![/red]")
-        console.print(
-            "[yellow]💡 Create a 'docs' folder and add some text files to get started.[/yellow]"
-        )
-        raise typer.Exit(1)
+    async def ingest_main():
+        chat = InteractiveRAGChat(docs_path, enable_reflexion=reflexion)
+        console.print("[bold blue]📥 Document Ingestion Mode[/bold blue]")
+        success = await chat.ingest_documents()
+        if success:
+            console.print(
+                "[bold green]✅ Ingestion completed successfully![/bold green]"
+            )
+        else:
+            console.print("[bold red]❌ Ingestion failed![/bold red]")
 
-    async def run_ingestion():
-        rag = AdvancedRAGEngine(use_context_aware_decomposer=True)
-
-        with console.status(
-            "[bold cyan]Ingesting documents...", spinner="dots"
-        ):
-            try:
-                num_docs = await rag.ingest_documents(docs_path)
-                console.print(
-                    f"[green]✅ Successfully ingested {num_docs} document chunks![/green]"
-                )
-                console.print(
-                    "[cyan]💡 You can now start chatting with: [bold]uv run python rag.py[/bold][/cyan]"
-                )
-            except Exception as e:
-                if verbose:
-                    console.print_exception()
-                else:
-                    console.print(f"[red]❌ Ingestion failed: {e}[/red]")
-                raise typer.Exit(1)
-
-    try:
-        asyncio.run(run_ingestion())
-    except KeyboardInterrupt:
-        console.print("\n[red]❌ Ingestion cancelled![/red]")
+    asyncio.run(ingest_main())
 
 
 @app.command()
-def demo():
-    """Show demo questions for testing"""
+def config():
+    """Show current configuration"""
+    console.print("[bold cyan]⚙️  Current Configuration[/bold cyan]")
 
-    demo_questions = [
-        "What are the benefits and risks of artificial intelligence?",
-        "Compare machine learning and deep learning approaches",
-        "Explain the causes and effects of climate change",
-        "What are the advantages and disadvantages of renewable energy?",
-    ]
+    config_table = Table(title="Settings", show_header=True)
+    config_table.add_column("Setting", style="cyan")
+    config_table.add_column("Value", style="green")
 
-    console.print("[bold cyan]🎬 Demo Mode - Sample Questions:[/bold cyan]\n")
-
-    for i, question in enumerate(demo_questions, 1):
-        console.print(f"{i}. {question}")
-
-    console.print(
-        "\n[dim]Copy any question above and use it in chat mode![/dim]"
+    # Show key settings
+    config_table.add_row(
+        "Reflexion Loop Enabled", str(settings.enable_reflexion_loop)
     )
-    console.print(
-        "[yellow]💡 Run: [bold]uv run python rag.py[/bold] to start chatting[/yellow]"
+    config_table.add_row(
+        "Max Reflexion Cycles", str(settings.max_reflexion_cycles)
     )
+    config_table.add_row(
+        "Confidence Threshold", str(settings.confidence_threshold)
+    )
+    config_table.add_row(
+        "Memory Cache Enabled", str(settings.enable_memory_cache)
+    )
+    config_table.add_row("Generation Model", settings.llm_model)
+    config_table.add_row("Evaluation Model", settings.evaluation_model)
+    config_table.add_row("Summary Model", settings.summary_model)
+    config_table.add_row("Vector Store", settings.vector_store_type)
+    config_table.add_row("Embedding Model", settings.embedding_model)
+
+    console.print(config_table)
 
 
 if __name__ == "__main__":

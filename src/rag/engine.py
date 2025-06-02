@@ -17,10 +17,11 @@ from ..decomposition.query_decomposer import (
 )
 from ..llm.github_llm import GitHubLLM
 from ..vectorstore.chroma_store import ChromaVectorStore
+from .reflexion_engine import ReflexionRAGEngine
 
 
 class AdvancedRAGEngine:
-    """RAG engine with query decomposition and deep reasoning"""
+    """RAG engine with query decomposition and reflexion loop support"""
 
     def __init__(
         self,
@@ -28,37 +29,76 @@ class AdvancedRAGEngine:
         vector_store: Optional[VectorStoreInterface] = None,
         query_decomposer: Optional[QueryDecomposerInterface] = None,
         use_context_aware_decomposer: bool = True,
+        enable_reflexion: Optional[bool] = None,
     ):
-        self.llm = llm or GitHubLLM()
-        self.vector_store = vector_store or ChromaVectorStore()
+        # Determine which mode to use
+        self.enable_reflexion = (
+            enable_reflexion
+            if enable_reflexion is not None
+            else settings.enable_reflexion_loop
+        )
 
-        if use_context_aware_decomposer:
-            self.query_decomposer = query_decomposer or ContextAwareDecomposer(
-                self.llm
+        if self.enable_reflexion:
+            # Use reflexion engine
+            self.reflexion_engine = ReflexionRAGEngine(
+                generation_llm=llm, vector_store=vector_store
             )
+            self.vector_store = self.reflexion_engine.vector_store
+            self.document_loader = self.reflexion_engine.document_loader
+            self.document_processor = self.reflexion_engine.document_processor
         else:
-            self.query_decomposer = query_decomposer or SmartQueryDecomposer(
-                self.llm
-            )
+            # Use traditional decomposition engine
+            self.llm = llm or GitHubLLM()
+            self.vector_store = vector_store or ChromaVectorStore()
 
-        self.document_loader = DocumentLoader()
-        self.document_processor = DocumentProcessor()
+            if use_context_aware_decomposer:
+                self.query_decomposer = (
+                    query_decomposer or ContextAwareDecomposer(self.llm)
+                )
+            else:
+                self.query_decomposer = (
+                    query_decomposer or SmartQueryDecomposer(self.llm)
+                )
+
+            self.document_loader = DocumentLoader()
+            self.document_processor = DocumentProcessor()
 
     async def ingest_documents(self, directory_path: str) -> int:
         """Ingest documents from directory"""
-        documents = await self.document_loader.load_from_directory(
-            directory_path
-        )
-        processed_docs = await self.document_processor.process_documents(
-            documents
-        )
-        doc_ids = await self.vector_store.add_documents(processed_docs)
-        return len(doc_ids)
+        if self.enable_reflexion:
+            return await self.reflexion_engine.ingest_documents(directory_path)
+        else:
+            documents = await self.document_loader.load_from_directory(
+                directory_path
+            )
+            processed_docs = await self.document_processor.process_documents(
+                documents
+            )
+            doc_ids = await self.vector_store.add_documents(processed_docs)
+            return len(doc_ids)
+
+    async def query_stream(
+        self, question: str, k: Optional[int] = None
+    ) -> AsyncIterator[StreamingChunk]:
+        """Main query method - routes to appropriate engine"""
+
+        if self.enable_reflexion:
+            print("🔄 Using Reflexion Loop Architecture")
+            async for (
+                chunk
+            ) in self.reflexion_engine.query_with_reflexion_stream(question):
+                yield chunk
+        else:
+            print("🔧 Using Query Decomposition Architecture")
+            async for chunk in self.query_with_decomposition_stream(
+                question, k
+            ):
+                yield chunk
 
     async def query_with_decomposition_stream(
         self, question: str, k: Optional[int] = None
     ) -> AsyncIterator[StreamingChunk]:
-        """Query with automatic decomposition and streaming"""
+        """Query with automatic decomposition and streaming (legacy mode)"""
         k = k or settings.retrieval_k
 
         print(f"🔍 Original Question: {question}")
@@ -67,7 +107,7 @@ class AdvancedRAGEngine:
 
         if len(sub_query_texts) == 1:
             print("📝 No decomposition needed, using direct RAG")
-            async for chunk in self.query_stream(question, k):
+            async for chunk in self.simple_query_stream(question, k):
                 yield chunk
             return
 
@@ -140,7 +180,7 @@ class AdvancedRAGEngine:
             )
             self.query_decomposer.add_to_history(question, final_answer)
 
-    async def query_stream(
+    async def simple_query_stream(
         self, question: str, k: Optional[int] = None
     ) -> AsyncIterator[StreamingChunk]:
         """Regular streaming RAG query"""
@@ -238,5 +278,36 @@ Instructions:
 
 Answer:"""
 
+    def get_engine_info(self) -> dict:
+        """Get information about current engine configuration"""
+        info = {
+            "reflexion_enabled": self.enable_reflexion,
+            "engine_type": "ReflexionRAGEngine"
+            if self.enable_reflexion
+            else "DecompositionRAGEngine",
+        }
 
+        if self.enable_reflexion:
+            info.update(
+                {
+                    "max_reflexion_cycles": settings.max_reflexion_cycles,
+                    "confidence_threshold": settings.confidence_threshold,
+                    "memory_cache_enabled": settings.enable_memory_cache,
+                    "memory_stats": self.reflexion_engine.get_memory_stats(),
+                }
+            )
+        else:
+            info.update(
+                {
+                    "decomposition_enabled": settings.enable_query_decomposition,
+                    "context_aware_decomposer": isinstance(
+                        self.query_decomposer, ContextAwareDecomposer
+                    ),
+                }
+            )
+
+        return info
+
+
+# Backward compatibility
 RAGEngine = AdvancedRAGEngine
