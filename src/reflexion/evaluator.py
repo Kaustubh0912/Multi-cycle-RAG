@@ -169,7 +169,7 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
 
                 RESPONSE FORMAT (JSON):
                 {{
-                    "confidence_score": 0.85,
+                    "confidence_score": 0.35,
                     "decision": "continue|refine_query|complete|insufficient_data",
                     "reasoning": "Detailed explanation of the assessment",
                     "covered_aspects": ["aspect1", "aspect2"],
@@ -185,6 +185,10 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
                 - "refine_query": need more specific queries for missing aspects
                 - "insufficient_data": fundamental information is missing from knowledge base
 
+                INSTRUCTION:
+                1. Be very strict in the process
+                2. Always lower confidence on mistakes
+                3. Ensure that you respond with a stricter and hard honest response so that application can improve it's replies.
                 Provide your evaluation as valid JSON:"""
 
     def _create_follow_up_prompt(

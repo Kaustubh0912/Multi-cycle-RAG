@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -75,14 +75,10 @@ class ReflexionMemory:
     """Memory cache for reflexion loops"""
 
     original_query: str
-    cycles: List[ReflexionCycle]
+    cycles: List[ReflexionCycle] = field(default_factory=list)
     final_answer: str = ""
     total_processing_time: float = 0.0
     total_documents_retrieved: int = 0
-
-    def __post_init__(self):
-        if not self.cycles:
-            self.cycles = []
 
     def add_cycle(self, cycle: ReflexionCycle):
         """Add a reflexion cycle to memory"""
