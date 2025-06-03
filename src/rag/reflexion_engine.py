@@ -1,5 +1,6 @@
 import asyncio
 import time
+import traceback
 from datetime import datetime
 from typing import AsyncIterator, List, Optional
 
@@ -9,6 +10,7 @@ from ..core.interfaces import (
     LLMInterface,
     ReflexionCycle,
     ReflexionDecision,
+    ReflexionEvaluation,
     ReflexionEvaluatorInterface,
     ReflexionMemory,
     StreamingChunk,
@@ -94,12 +96,19 @@ class ReflexionRAGEngine:
         query_hash = create_query_hash(question)
         cached_memory = None
         if self.memory_cache:
-            cached_memory = self.memory_cache.get(query_hash)
-            if cached_memory:
-                print("💾 Found cached reflexion result")
-                async for chunk in self._stream_cached_result(cached_memory):
-                    yield chunk
-                return
+            try:
+                cached_memory = self.memory_cache.get(query_hash)
+                if cached_memory:
+                    print("💾 Found cached reflexion result")
+                    async for chunk in self._stream_cached_result(
+                        cached_memory
+                    ):
+                        yield chunk
+                    return
+            except Exception as e:
+                print(
+                    f"⚠️ Cache retrieval error (continuing without cache): {e}"
+                )
 
         # Initialize reflexion memory
         reflexion_memory = ReflexionMemory(original_query=question)
@@ -116,15 +125,20 @@ class ReflexionRAGEngine:
                 cycle_start = time.time()
 
                 # Step 1: Retrieve documents
-                k = (
-                    settings.initial_retrieval_k
-                    if cycle_number == 1
-                    else settings.reflexion_retrieval_k
-                )
-                retrieved_docs = await self.vector_store.similarity_search(
-                    current_query, k=k
-                )
-                print(f"📚 Retrieved {len(retrieved_docs)} documents")
+                try:
+                    k = (
+                        settings.initial_retrieval_k
+                        if cycle_number == 1
+                        else settings.reflexion_retrieval_k
+                    )
+                    retrieved_docs = await self.vector_store.similarity_search(
+                        current_query, k=k
+                    )
+                    print(f"📚 Retrieved {len(retrieved_docs)} documents")
+                except Exception as e:
+                    print(f"⚠️ Document retrieval error: {e}")
+                    retrieved_docs = []
+                    print("⚠️ Proceeding with empty document set")
 
                 # Step 2: Generate partial answer
                 context = self._prepare_context(retrieved_docs)
@@ -133,53 +147,128 @@ class ReflexionRAGEngine:
                 )
 
                 partial_answer_chunks = []
-                async for chunk in self.generation_llm.generate_stream(
-                    generation_prompt
-                ):
-                    partial_answer_chunks.append(chunk.content)
-                    # Stream intermediate answers as markdown blocks
-                    if chunk.content:
-                        yield StreamingChunk(
-                            content=chunk.content,
-                            metadata={
-                                "cycle_number": cycle_number,
-                                "is_partial": True,
-                                "reflexion_mode": True,
-                            },
-                        )
+                try:
+                    async for chunk in self.generation_llm.generate_stream(
+                        generation_prompt
+                    ):
+                        partial_answer_chunks.append(chunk.content)
+                        # Stream intermediate answers as markdown blocks
+                        if chunk.content:
+                            yield StreamingChunk(
+                                content=chunk.content,
+                                metadata={
+                                    "cycle_number": cycle_number,
+                                    "is_partial": True,
+                                    "reflexion_mode": True,
+                                },
+                            )
+                except Exception as e:
+                    print(f"⚠️ Generation error: {e}")
+                    partial_answer_chunks = ["Error generating response."]
+                    yield StreamingChunk(
+                        content="⚠️ Error during response generation. Attempting recovery...",
+                        metadata={
+                            "cycle_number": cycle_number,
+                            "is_partial": True,
+                            "is_error": True,
+                            "reflexion_mode": True,
+                        },
+                    )
 
                 partial_answer = "".join(partial_answer_chunks)
+
+                # Check if response appears truncated
+                if self._is_likely_truncated(partial_answer):
+                    print(
+                        "⚠️ Response appears truncated, attempting continuation..."
+                    )
+
+                    # Generate continuation
+                    continuation_prompt = f"""Continue this response where it left off. Maintain the same tone and style:
+
+                    PREVIOUS RESPONSE:
+                    {partial_answer}
+
+                    CONTINUE FROM WHERE IT STOPPED:"""
+
+                    continuation_chunks = []
+                    async for chunk in self.generation_llm.generate_stream(
+                        continuation_prompt, max_tokens=settings.llm_max_tokens
+                    ):
+                        continuation_chunks.append(chunk.content)
+                        # Stream continuation
+                        if chunk.content:
+                            yield StreamingChunk(
+                                content=chunk.content,
+                                metadata={
+                                    "cycle_number": cycle_number,
+                                    "is_partial": True,
+                                    "is_continuation": True,
+                                    "reflexion_mode": True,
+                                },
+                            )
+
+                    continuation = "".join(continuation_chunks)
+                    partial_answer = partial_answer + " " + continuation
+
                 print(f"✅ Generated answer ({len(partial_answer)} chars)")
 
                 # Step 3: Self-evaluation
                 print("🤔 Evaluating response quality...")
-                evaluation = await self.reflexion_evaluator.evaluate_response(
-                    question, partial_answer, retrieved_docs, cycle_number
-                )
+                try:
+                    evaluation = (
+                        await self.reflexion_evaluator.evaluate_response(
+                            question,
+                            partial_answer,
+                            retrieved_docs,
+                            cycle_number,
+                        )
+                    )
 
-                print(f"📊 Confidence: {evaluation.confidence_score:.2f}")
-                print(f"🎯 Decision: {evaluation.decision.value}")
-                print(f"💭 Reasoning: {evaluation.reasoning}")
+                    print(f"📊 Confidence: {evaluation.confidence_score:.2f}")
+                    print(f"🎯 Decision: {evaluation.decision.value}")
+                    print(f"💭 Reasoning: {evaluation.reasoning}")
+                except Exception as e:
+                    print(f"⚠️ Evaluation error: {e}")
+                    # Create fallback evaluation with conservative confidence
+                    evaluation = ReflexionEvaluation(
+                        confidence_score=0.5,
+                        decision=ReflexionDecision.CONTINUE,
+                        reasoning=f"Evaluation failed with error: {e}",
+                        follow_up_queries=[],
+                        covered_aspects=[],
+                        missing_aspects=["evaluation_error"],
+                        uncertainty_phrases=[],
+                        metadata={"error": str(e)},
+                    )
+                    print("⚠️ Created fallback evaluation with confidence 0.5")
 
                 # Create reflexion cycle
-                cycle = ReflexionCycle(
-                    cycle_number=cycle_number,
-                    query=current_query,
-                    retrieved_docs=retrieved_docs,
-                    partial_answer=partial_answer,
-                    evaluation=evaluation,
-                    timestamp=datetime.now(),
-                    processing_time=time.time() - cycle_start,
-                )
-                reflexion_memory.add_cycle(cycle)
+                try:
+                    cycle = ReflexionCycle(
+                        cycle_number=cycle_number,
+                        query=current_query,
+                        retrieved_docs=retrieved_docs,
+                        partial_answer=partial_answer,
+                        evaluation=evaluation,
+                        timestamp=datetime.now(),
+                        processing_time=time.time() - cycle_start,
+                    )
+                    reflexion_memory.add_cycle(cycle)
+                except Exception as e:
+                    print(f"⚠️ Error adding cycle to memory: {e}")
 
                 # Step 4: Decision tree
-                if evaluation.decision == ReflexionDecision.COMPLETE:
-                    print("✅ Response is complete!")
-                    reflexion_memory.final_answer = partial_answer
-                    break
+                if settings.debug_mode:
+                    print(
+                        f"🐛 DEBUG - Confidence: {evaluation.confidence_score:.3f}, Threshold: {settings.confidence_threshold}"
+                    )
+                    print(f"🐛 DEBUG - Decision: {evaluation.decision.value}")
+                    print(
+                        f"🐛 DEBUG - Will continue: {evaluation.confidence_score < settings.confidence_threshold}"
+                    )
 
-                elif evaluation.decision == ReflexionDecision.INSUFFICIENT_DATA:
+                if evaluation.decision == ReflexionDecision.INSUFFICIENT_DATA:
                     print("❌ Insufficient data in knowledge base")
                     reflexion_memory.final_answer = (
                         self._create_insufficient_data_response(
@@ -191,7 +280,20 @@ class ReflexionRAGEngine:
                 elif (
                     evaluation.confidence_score >= settings.confidence_threshold
                 ):
-                    print("✅ Confidence threshold reached!")
+                    print(
+                        f"✅ Confidence threshold reached! ({evaluation.confidence_score:.2f} >= {settings.confidence_threshold})"
+                    )
+                    reflexion_memory.final_answer = partial_answer
+                    break
+
+                elif (
+                    evaluation.decision == ReflexionDecision.COMPLETE
+                    and evaluation.confidence_score
+                    >= settings.confidence_threshold * 0.9
+                ):
+                    print(
+                        f"✅ Response is complete with sufficient confidence! ({evaluation.confidence_score:.2f})"
+                    )
                     reflexion_memory.final_answer = partial_answer
                     break
 
@@ -201,21 +303,44 @@ class ReflexionRAGEngine:
 
                 else:
                     # Continue with follow-up queries
-                    if evaluation.follow_up_queries:
-                        current_query = evaluation.follow_up_queries[0]
-                        print(f"🔄 Following up with: {current_query}")
-                    else:
-                        # Generate follow-up queries
-                        follow_ups = await self.reflexion_evaluator.generate_follow_up_queries(
-                            question, partial_answer, evaluation.missing_aspects
-                        )
-                        if follow_ups:
-                            current_query = follow_ups[0]
-                            print(f"🔄 Generated follow-up: {current_query}")
+                    try:
+                        if evaluation.follow_up_queries:
+                            current_query = evaluation.follow_up_queries[0]
+                            print(f"🔄 Following up with: {current_query}")
                         else:
-                            print("❌ No follow-up queries generated, stopping")
-                            reflexion_memory.final_answer = partial_answer
-                            break
+                            # Generate follow-up queries
+                            try:
+                                follow_ups = await self.reflexion_evaluator.generate_follow_up_queries(
+                                    question,
+                                    partial_answer,
+                                    evaluation.missing_aspects,
+                                )
+                                if follow_ups:
+                                    current_query = follow_ups[0]
+                                    print(
+                                        f"🔄 Generated follow-up: {current_query}"
+                                    )
+                                else:
+                                    print(
+                                        "❌ No follow-up queries generated, stopping"
+                                    )
+                                    reflexion_memory.final_answer = (
+                                        partial_answer
+                                    )
+                                    break
+                            except Exception as e:
+                                print(
+                                    f"⚠️ Error generating follow-up queries: {e}"
+                                )
+                                print(
+                                    "❌ Stopping due to follow-up generation error"
+                                )
+                                reflexion_memory.final_answer = partial_answer
+                                break
+                    except Exception as e:
+                        print(f"⚠️ Error in follow-up query handling: {e}")
+                        reflexion_memory.final_answer = partial_answer
+                        break
 
                 cycle_number += 1
                 await asyncio.sleep(0.1)  # Brief pause between cycles
@@ -226,11 +351,24 @@ class ReflexionRAGEngine:
                 and len(reflexion_memory.cycles) > 1
             ):
                 print("\n🧠 Synthesizing final comprehensive answer...")
-                reflexion_memory.final_answer = (
-                    await self._synthesize_final_answer(
-                        question, reflexion_memory
+                try:
+                    reflexion_memory.final_answer = (
+                        await self._synthesize_final_answer(
+                            question, reflexion_memory
+                        )
                     )
-                )
+                except Exception as e:
+                    print(f"⚠️ Error synthesizing final answer: {e}")
+                    # Use the best partial answer we have as fallback
+                    best_cycle = max(
+                        reflexion_memory.cycles,
+                        key=lambda c: c.evaluation.confidence_score,
+                    )
+                    reflexion_memory.final_answer = (
+                        best_cycle.partial_answer
+                        or "Error synthesizing final answer."
+                    )
+                    print("⚠️ Using best partial answer as fallback")
 
             # Stream final answer
             final_answer = (
@@ -238,36 +376,117 @@ class ReflexionRAGEngine:
                 or "Unable to generate a complete answer."
             )
 
+            # Check if final answer appears truncated
+            if self._is_likely_truncated(final_answer):
+                print(
+                    "⚠️ Final answer appears truncated, attempting to complete it..."
+                )
+                completion_prompt = f"""Complete this response that was cut off. Maintain the same tone and style:
+
+                ORIGINAL QUESTION: {question}
+
+                CURRENT RESPONSE:
+                {final_answer}
+
+                COMPLETE THE RESPONSE:"""
+
+                completion_chunks = []
+                async for chunk in self.generation_llm.generate_stream(
+                    completion_prompt, max_tokens=settings.summary_max_tokens
+                ):
+                    completion_chunks.append(chunk.content)
+
+                completion = "".join(completion_chunks)
+                final_answer = final_answer + " " + completion
+
             # Add processing metadata
             reflexion_memory.total_processing_time = time.time() - start_time
 
             # Cache the result
             if self.memory_cache:
-                self.memory_cache.put(query_hash, reflexion_memory)
+                try:
+                    self.memory_cache.put(query_hash, reflexion_memory)
+                except Exception as e:
+                    print(f"⚠️ Error caching result: {e}")
 
             # Stream final answer with metadata
-            yield StreamingChunk(
-                content=f"\n\n## 🎯 Final Comprehensive Answer\n\n{final_answer}",
-                is_complete=True,
-                metadata={
-                    "reflexion_complete": True,
-                    "total_cycles": len(reflexion_memory.cycles),
-                    "total_processing_time": reflexion_memory.total_processing_time,
-                    "total_documents": reflexion_memory.total_documents_retrieved,
-                    "final_confidence": reflexion_memory.cycles[
-                        -1
-                    ].evaluation.confidence_score
-                    if reflexion_memory.cycles
-                    else 0.0,
-                    "memory_cached": self.memory_cache is not None,
-                },
-            )
+            try:
+                yield StreamingChunk(
+                    content=f"\n\n## 🎯 Final Comprehensive Answer\n\n{final_answer}",
+                    is_complete=True,
+                    metadata={
+                        "reflexion_complete": True,
+                        "total_cycles": len(reflexion_memory.cycles),
+                        "total_processing_time": reflexion_memory.total_processing_time,
+                        "total_documents": reflexion_memory.total_documents_retrieved,
+                        "final_confidence": reflexion_memory.cycles[
+                            -1
+                        ].evaluation.confidence_score
+                        if reflexion_memory.cycles
+                        else 0.0,
+                        "memory_cached": self.memory_cache is not None,
+                    },
+                )
+            except Exception as e:
+                print(f"⚠️ Error streaming final result: {e}")
+                # Simple fallback with minimal metadata
+                yield StreamingChunk(
+                    content=f"\n\n## Final Answer\n\n{final_answer}",
+                    is_complete=True,
+                    metadata={"reflexion_error": str(e)},
+                )
 
         except Exception as e:
-            print(f"❌ Reflexion loop failed: {e}")
+            error_msg = f"❌ Reflexion loop failed: {e}"
+            print(error_msg)
+            tb_info = traceback.format_exc()
+            print(f"Stack trace:\n{tb_info}")
+
+            # Yield error message to user
+            yield StreamingChunk(
+                content=f"\n\n⚠️ **Error in reflexion process:** {e}\n\nFalling back to simple RAG...\n\n",
+                metadata={"error": str(e), "is_error": True},
+            )
+
             # Fallback to simple query
-            async for chunk in self.simple_query_stream(question):
-                yield chunk
+            try:
+                async for chunk in self.simple_query_stream(question):
+                    yield chunk
+            except Exception as fallback_error:
+                # Ultimate fallback if simple query also fails
+                yield StreamingChunk(
+                    content=f"\n\n❌ **Critical error:** Both reflexion and fallback methods failed. Error: {fallback_error}",
+                    is_complete=True,
+                    metadata={"critical_error": str(fallback_error)},
+                )
+
+    def _is_likely_truncated(self, response: str) -> bool:
+        """Check if response appears to be truncated"""
+        if not response or len(response.strip()) < 50:
+            return False
+
+        # Check for proper ending punctuation
+        if not any(
+            response.strip().endswith(end) for end in [".", "!", "?", ":", ";"]
+        ):
+            return True
+
+        # Check for common truncation indicators
+        truncation_indicators = [
+            "...",
+            "[truncated]",
+            "[cut off]",
+            "due to length",
+            "character limit",
+            "token limit",
+        ]
+
+        if any(
+            indicator in response.lower() for indicator in truncation_indicators
+        ):
+            return True
+
+        return False
 
     async def simple_query_stream(
         self, question: str

@@ -15,24 +15,29 @@ class Settings(BaseSettings):
     # Generation model (primary)
     llm_model: str = Field(default="meta/Meta-Llama-3.1-405B-Instruct")
     llm_temperature: float = Field(default=0.7)
-    llm_max_tokens: int = Field(default=1000)
+    llm_max_tokens: int = Field(default=3000)
 
     # Evaluation model (for self-assessment)
     evaluation_model: str = Field(default="cohere/Cohere-command-r")
     evaluation_temperature: float = Field(default=0.3)
-    evaluation_max_tokens: int = Field(default=500)
+    evaluation_max_tokens: int = Field(default=1000)
 
     # Summary model (for final synthesis)
     summary_model: str = Field(default="meta/Meta-Llama-3.1-70B-Instruct")
     summary_temperature: float = Field(default=0.5)
-    summary_max_tokens: int = Field(default=2000)
+    summary_max_tokens: int = Field(default=4000)
 
     # Reflexion Loop Configuration
     enable_reflexion_loop: bool = Field(default=True)
-    max_reflexion_cycles: int = Field(default=5)
-    confidence_threshold: float = Field(default=0.8)
+    max_reflexion_cycles: int = Field(
+        default=3
+    )  # Reduced to avoid infinite loops
+    confidence_threshold: float = Field(
+        default=0.85
+    )
     initial_retrieval_k: int = Field(default=3)
     reflexion_retrieval_k: int = Field(default=5)
+    debug_mode: bool = Field(default=False)  # Added for debugging
 
     # Memory cache settings
     enable_memory_cache: bool = Field(default=True)

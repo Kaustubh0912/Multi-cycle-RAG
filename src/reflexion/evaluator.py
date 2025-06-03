@@ -180,8 +180,8 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
 
                 DECISION GUIDELINES:
                 - confidence_score: 0.0-1.0 (how well the question is answered)
-                - "complete": confidence >= 0.8 and no major gaps
-                - "continue": confidence < 0.8 but retrievable information exists
+                - "complete": confidence >= {settings.confidence_threshold} and no major gaps
+                - "continue": confidence < {settings.confidence_threshold} but retrievable information exists
                 - "refine_query": need more specific queries for missing aspects
                 - "insufficient_data": fundamental information is missing from knowledge base
 
@@ -289,9 +289,9 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
             confidence -= 0.2
 
         # Determine decision based on confidence
-        if confidence >= 0.8:
+        if confidence >= settings.confidence_threshold:
             decision = ReflexionDecision.COMPLETE
-        elif confidence >= 0.5:
+        elif confidence >= settings.confidence_threshold * 0.6:
             decision = ReflexionDecision.CONTINUE
         else:
             decision = ReflexionDecision.REFINE_QUERY
