@@ -1,3 +1,4 @@
+import hashlib
 import time
 from collections import OrderedDict
 from typing import Any, Dict, Optional
@@ -52,17 +53,11 @@ class ReflexionMemoryCache:
         return {
             "size": len(self.cache),
             "max_size": self.max_size,
-            "hit_rate": self._calculate_hit_rate(),
             "oldest_entry": self._get_oldest_entry_age(),
         }
 
-    def _calculate_hit_rate(self) -> float:
-        """Calculate cache hit rate (placeholder for now)"""
-        # This requires tracking hits/misses over time
-        return 0.0
-
     def _get_oldest_entry_age(self) -> Optional[float]:
-        """Get age of oldest cache entry inn seconds"""
+        """Get age of oldest cache entry in seconds"""
         if not self.access_times:
             return None
         oldest_time = min(self.access_times.values())
@@ -88,6 +83,4 @@ class ReflexionMemoryCache:
 
 def create_query_hash(query: str) -> str:
     """Create a hash for query caching"""
-    import hashlib
-
     return hashlib.md5(query.lower().strip().encode()).hexdigest()

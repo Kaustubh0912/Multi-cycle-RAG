@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
-    # LLM configuration - Multiple models for reflexion
+    # Authentication
     github_token: str = Field(default="")
 
     # Generation model (primary)
@@ -27,51 +27,28 @@ class Settings(BaseSettings):
     summary_temperature: float = Field(default=0.5)
     summary_max_tokens: int = Field(default=4000)
 
-    # Reflexion Loop Configuration
-    enable_reflexion_loop: bool = Field(default=True)
-    max_reflexion_cycles: int = Field(
-        default=3
-    )  # Reduced to avoid infinite loops
-    confidence_threshold: float = Field(
-        default=0.85
-    )
+    # Reflexion configuration
+    max_reflexion_cycles: int = Field(default=3)
+    confidence_threshold: float = Field(default=0.85)
     initial_retrieval_k: int = Field(default=3)
     reflexion_retrieval_k: int = Field(default=5)
-    debug_mode: bool = Field(default=False)  # Added for debugging
 
-    # Memory cache settings
+    # Memory cache
     enable_memory_cache: bool = Field(default=True)
     max_cache_size: int = Field(default=100)
 
-    # Query Decomposition Configuration (keeping existing)
-    enable_query_decomposition: bool = Field(
-        default=False
-    )  # Disabled for reflexion mode
-    use_context_aware_decomposer: bool = Field(default=True)
-    decomposition_temperature: float = Field(default=0.3)
-    max_sub_queries: int = Field(default=5)
-    min_query_length_for_decomposition: int = Field(default=15)
-
-    # Streaming configuration
-    enable_streaming: bool = Field(default=True)
-    steam_include_usage: bool = Field(default=True)
-
-    # Database configuration
-    vector_store_type: str = Field(default="chroma")
+    # Vector store
     chroma_persist_directory: str = Field(default="./chroma_db")
     chroma_collection_name: str = Field(default="rag_collection")
 
-    # Embedding configuration
+    # Embedding
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
     embedding_device: str = Field(default="cpu")
 
-    # RAG configuration
+    # Document processing
     retrieval_k: int = Field(default=5)
     chunk_size: int = Field(default=1000)
     chunk_overlap: int = Field(default=200)
-
-    # Logging
-    log_level: str = Field(default="INFO")
 
 
 # Global settings instance

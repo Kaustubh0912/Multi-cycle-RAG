@@ -84,12 +84,7 @@ class ReflexionRAGEngine:
     ) -> AsyncIterator[StreamingChunk]:
         """Main reflexion loop query with streaming"""
 
-        if not settings.enable_reflexion_loop:
-            # Fallback to simple RAG
-            async for chunk in self.simple_query_stream(question):
-                yield chunk
-            return
-
+        # Always use reflexion loop (legacy fallback removed)
         print(f"🔄 Starting Reflexion Loop for: {question}")
 
         # Check memory cache first
@@ -259,15 +254,6 @@ class ReflexionRAGEngine:
                     print(f"⚠️ Error adding cycle to memory: {e}")
 
                 # Step 4: Decision tree
-                if settings.debug_mode:
-                    print(
-                        f"🐛 DEBUG - Confidence: {evaluation.confidence_score:.3f}, Threshold: {settings.confidence_threshold}"
-                    )
-                    print(f"🐛 DEBUG - Decision: {evaluation.decision.value}")
-                    print(
-                        f"🐛 DEBUG - Will continue: {evaluation.confidence_score < settings.confidence_threshold}"
-                    )
-
                 if evaluation.decision == ReflexionDecision.INSUFFICIENT_DATA:
                     print("❌ Insufficient data in knowledge base")
                     reflexion_memory.final_answer = (

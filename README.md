@@ -1,10 +1,10 @@
-# Advanced RAG Engine with Reflexion Architecture
+# Reflexion RAG Engine
 
-A production-ready Retrieval Augmented Generation system featuring intelligent reflexion loops, multi-LLM orchestration, and enterprise-grade architecture. Built for complex reasoning tasks that require iterative refinement and self-evaluation.
+A streamlined Retrieval Augmented Generation system with focused reflexion loop architecture. Built for complex reasoning tasks that require iterative refinement and self-evaluation.
 
 ## ✨ Core Features
 
-**🧠 Reflexion Loop Architecture**: Advanced self-evaluation system with up to 5 iterative cycles, confidence scoring, and dynamic query refinement for comprehensive answers
+**🧠 Reflexion Loop Architecture**: Advanced self-evaluation system with iterative cycles, confidence scoring, and dynamic query refinement for comprehensive answers
 
 **🔄 Multi-LLM Orchestration**: Specialized model allocation with dedicated generation (Llama-405B), evaluation (Cohere), and synthesis (Llama-70B) models for optimal performance
 
@@ -14,9 +14,44 @@ A production-ready Retrieval Augmented Generation system featuring intelligent r
 
 **⚡ Streaming Architecture**: Real-time response streaming with progress indicators and cycle-by-cycle transparency
 
-**🎯 Context-Aware Processing**: Dynamic retrieval scaling (k=3 initial, k=5 reflexion) with intelligent context management
+**🎯 Context-Aware Processing**: Dynamic retrieval scaling with intelligent context management
 
-**🏗️ Enterprise-Ready**: Comprehensive error handling, async-first architecture, and modular design with dependency injection
+**🏗️ Modular Design**: Clean architecture with dependency injection and clear interfaces
+
+## 🚀 Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the interactive chat
+python -m rag.py chat
+
+# Ingest documents (first time setup)
+python -m rag.py ingest --docs_path=./docs
+
+# View current configuration
+python -m rag.py config
+```
+
+## 💻 Usage Examples
+
+```python
+from rag.src import AdvancedRAGEngine
+
+# Create RAG engine
+engine = AdvancedRAGEngine()
+
+# Process a query
+async def process_query():
+    response = await engine.query("What is reflexion RAG?")
+    print(response)
+
+# Stream a response
+async def stream_query():
+    async for chunk in engine.query_stream("How does reflexion improve RAG?"):
+        print(chunk.content, end="")
+```
 
 ## 🏛️ Architecture Overview
 

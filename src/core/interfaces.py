@@ -2,9 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
-
-from typing_extensions import AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 
 class ReflexionDecision(Enum):
@@ -106,39 +104,6 @@ class ReflexionMemory:
         return all_docs
 
 
-@dataclass
-class SubQuery:
-    """Individual sub-query with it's answer"""
-
-    question: str
-    answer: str
-    source_documents: Optional[List[Document]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        if self.source_documents is None:
-            self.source_documents = []
-        if self.metadata is None:
-            self.metadata = {}
-
-
-@dataclass
-class DecomposedQuery:
-    """Decomposed query with sub-queries and final reasoning"""
-
-    original_question: str
-    sub_queries: List[SubQuery]
-    final_answer: str = ""
-    reasoning_steps: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        if self.reasoning_steps is None:
-            self.reasoning_steps = []
-        if self.metadata is None:
-            self.metadata = {}
-
-
 class LLMInterface(ABC):
     """Abstract base class for all LLM implementations"""
 
@@ -182,24 +147,8 @@ class ReflexionEvaluatorInterface(ABC):
         pass
 
 
-class QueryDecomposerInterface(ABC):
-    """Abstract interface for query decomposition"""
-
-    @abstractmethod
-    async def decompose_query(
-        self, query: str, context: Optional[str] = None
-    ) -> List[str]:
-        """Decompose a complex query into sub-queries"""
-        pass
-
-    @abstractmethod
-    async def should_decompose(self, query: str) -> bool:
-        """Determine if a query needs decomposition"""
-        pass
-
-
 class VectorStoreInterface(ABC):
-    """ABstract base class for all vector store implementations"""
+    """Abstract base class for all vector store implementations"""
 
     @abstractmethod
     async def add_documents(self, documents: List[Document]) -> List[str]:
