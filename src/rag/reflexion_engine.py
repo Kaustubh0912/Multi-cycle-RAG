@@ -1,8 +1,7 @@
 import asyncio
 import time
-import traceback
 from datetime import datetime
-from typing import AsyncIterator, List, Optional
+from typing import AsyncIterator, Dict, List, Optional
 
 from ..config.settings import settings
 from ..core.interfaces import (
@@ -21,6 +20,7 @@ from ..data.processor import DocumentProcessor
 from ..llm.github_llm import GitHubLLM
 from ..memory.cache import ReflexionMemoryCache, create_query_hash
 from ..reflexion.evaluator import SmartReflexionEvaluator
+from ..utils.logging import logger
 from ..vectorstore.chroma_store import ChromaVectorStore
 
 
@@ -69,7 +69,14 @@ class ReflexionRAGEngine:
         self.document_processor = DocumentProcessor()
 
     async def ingest_documents(self, directory_path: str) -> int:
-        """Ingest documents from directory"""
+        """Ingest documents from directory
+
+        Args:
+            directory_path: Path to directory containing documents
+
+        Returns:
+            Number of documents successfully ingested
+        """
         documents = await self.document_loader.load_from_directory(
             directory_path
         )
@@ -85,7 +92,7 @@ class ReflexionRAGEngine:
         """Main reflexion loop query with streaming"""
 
         # Always use reflexion loop (legacy fallback removed)
-        print(f"🔄 Starting Reflexion Loop for: {question}")
+        logger.info("Starting Reflexion Loop", query=question)
 
         # Check memory cache first
         query_hash = create_query_hash(question)
@@ -94,15 +101,18 @@ class ReflexionRAGEngine:
             try:
                 cached_memory = self.memory_cache.get(query_hash)
                 if cached_memory:
-                    print("💾 Found cached reflexion result")
+                    logger.info(
+                        "Found cached reflexion result", query_hash=query_hash
+                    )
                     async for chunk in self._stream_cached_result(
                         cached_memory
                     ):
                         yield chunk
                     return
             except Exception as e:
-                print(
-                    f"⚠️ Cache retrieval error (continuing without cache): {e}"
+                logger.warning(
+                    "Cache retrieval error (continuing without cache)",
+                    error=str(e),
                 )
 
         # Initialize reflexion memory
@@ -114,8 +124,10 @@ class ReflexionRAGEngine:
             current_query = question
 
             while cycle_number <= settings.max_reflexion_cycles:
-                print(f"\n🔄 Reflexion Cycle {cycle_number}")
-                print(f"🔍 Query: {current_query}")
+                logger.info("Starting reflexion cycle", cycle=cycle_number)
+                logger.info(
+                    "Processing query", query=current_query, cycle=cycle_number
+                )
 
                 cycle_start = time.time()
 
@@ -129,11 +141,13 @@ class ReflexionRAGEngine:
                     retrieved_docs = await self.vector_store.similarity_search(
                         current_query, k=k
                     )
-                    print(f"📚 Retrieved {len(retrieved_docs)} documents")
+                    logger.info(
+                        "Retrieved documents", count=len(retrieved_docs)
+                    )
                 except Exception as e:
-                    print(f"⚠️ Document retrieval error: {e}")
+                    logger.error("Document retrieval error", error=str(e))
                     retrieved_docs = []
-                    print("⚠️ Proceeding with empty document set")
+                    logger.warning("Proceeding with empty document set")
 
                 # Step 2: Generate partial answer
                 context = self._prepare_context(retrieved_docs)
@@ -158,7 +172,9 @@ class ReflexionRAGEngine:
                                 },
                             )
                 except Exception as e:
-                    print(f"⚠️ Generation error: {e}")
+                    logger.error(
+                        "Generation error", error=str(e), cycle=cycle_number
+                    )
                     partial_answer_chunks = ["Error generating response."]
                     yield StreamingChunk(
                         content="⚠️ Error during response generation. Attempting recovery...",
@@ -174,8 +190,9 @@ class ReflexionRAGEngine:
 
                 # Check if response appears truncated
                 if self._is_likely_truncated(partial_answer):
-                    print(
-                        "⚠️ Response appears truncated, attempting continuation..."
+                    logger.warning(
+                        "Response appears truncated, attempting continuation",
+                        cycle=cycle_number,
                     )
 
                     # Generate continuation
@@ -206,10 +223,14 @@ class ReflexionRAGEngine:
                     continuation = "".join(continuation_chunks)
                     partial_answer = partial_answer + " " + continuation
 
-                print(f"✅ Generated answer ({len(partial_answer)} chars)")
+                logger.info(
+                    "Generated answer",
+                    chars=len(partial_answer),
+                    cycle=cycle_number,
+                )
 
                 # Step 3: Self-evaluation
-                print("🤔 Evaluating response quality...")
+                logger.info("Evaluating response quality", cycle=cycle_number)
                 try:
                     evaluation = (
                         await self.reflexion_evaluator.evaluate_response(
@@ -220,11 +241,17 @@ class ReflexionRAGEngine:
                         )
                     )
 
-                    print(f"📊 Confidence: {evaluation.confidence_score:.2f}")
-                    print(f"🎯 Decision: {evaluation.decision.value}")
-                    print(f"💭 Reasoning: {evaluation.reasoning}")
+                    logger.info(
+                        "Evaluation complete",
+                        confidence=f"{evaluation.confidence_score:.2f}",
+                        decision=evaluation.decision.name,
+                        cycle=cycle_number,
+                    )
+                    logger.debug(
+                        "Evaluation reasoning", reasoning=evaluation.reasoning
+                    )
                 except Exception as e:
-                    print(f"⚠️ Evaluation error: {e}")
+                    logger.error("Evaluation error", error=str(e))
                     # Create fallback evaluation with conservative confidence
                     evaluation = ReflexionEvaluation(
                         confidence_score=0.5,
@@ -236,7 +263,12 @@ class ReflexionRAGEngine:
                         uncertainty_phrases=[],
                         metadata={"error": str(e)},
                     )
-                    print("⚠️ Created fallback evaluation with confidence 0.5")
+                    logger.warning(
+                        "Using fallback evaluation",
+                        confidence=0.5,
+                        decision="CONTINUE",
+                        error=str(e),
+                    )
 
                 # Create reflexion cycle
                 try:
@@ -251,11 +283,18 @@ class ReflexionRAGEngine:
                     )
                     reflexion_memory.add_cycle(cycle)
                 except Exception as e:
-                    print(f"⚠️ Error adding cycle to memory: {e}")
+                    logger.error(
+                        "Error adding cycle to memory",
+                        error=str(e),
+                        cycle=cycle_number,
+                    )
 
                 # Step 4: Decision tree
                 if evaluation.decision == ReflexionDecision.INSUFFICIENT_DATA:
-                    print("❌ Insufficient data in knowledge base")
+                    logger.warning(
+                        "Insufficient data in knowledge base",
+                        cycle=cycle_number,
+                    )
                     reflexion_memory.final_answer = (
                         self._create_insufficient_data_response(
                             question, reflexion_memory.get_all_partial_answers()
@@ -266,8 +305,11 @@ class ReflexionRAGEngine:
                 elif (
                     evaluation.confidence_score >= settings.confidence_threshold
                 ):
-                    print(
-                        f"✅ Confidence threshold reached! ({evaluation.confidence_score:.2f} >= {settings.confidence_threshold})"
+                    logger.info(
+                        "Confidence threshold reached",
+                        confidence=f"{evaluation.confidence_score:.2f}",
+                        threshold=settings.confidence_threshold,
+                        cycle=cycle_number,
                     )
                     reflexion_memory.final_answer = partial_answer
                     break
@@ -277,14 +319,19 @@ class ReflexionRAGEngine:
                     and evaluation.confidence_score
                     >= settings.confidence_threshold * 0.9
                 ):
-                    print(
-                        f"✅ Response is complete with sufficient confidence! ({evaluation.confidence_score:.2f})"
+                    logger.info(
+                        "Response is complete with sufficient confidence",
+                        confidence=f"{evaluation.confidence_score:.2f}",
+                        cycle=cycle_number,
                     )
                     reflexion_memory.final_answer = partial_answer
                     break
 
                 elif cycle_number >= settings.max_reflexion_cycles:
-                    print("🔄 Max cycles reached, synthesizing final answer...")
+                    logger.info(
+                        "Max cycles reached, synthesizing final answer",
+                        cycles=cycle_number,
+                    )
                     break
 
                 else:
@@ -292,7 +339,11 @@ class ReflexionRAGEngine:
                     try:
                         if evaluation.follow_up_queries:
                             current_query = evaluation.follow_up_queries[0]
-                            print(f"🔄 Following up with: {current_query}")
+                            logger.info(
+                                "Following up with generated query",
+                                query=current_query,
+                                cycle=cycle_number,
+                            )
                         else:
                             # Generate follow-up queries
                             try:
@@ -303,28 +354,38 @@ class ReflexionRAGEngine:
                                 )
                                 if follow_ups:
                                     current_query = follow_ups[0]
-                                    print(
-                                        f"🔄 Generated follow-up: {current_query}"
+                                    logger.info(
+                                        "Generated follow-up query",
+                                        query=current_query,
+                                        cycle=cycle_number,
                                     )
                                 else:
-                                    print(
-                                        "❌ No follow-up queries generated, stopping"
+                                    logger.warning(
+                                        "No follow-up queries generated, stopping",
+                                        cycle=cycle_number,
                                     )
                                     reflexion_memory.final_answer = (
                                         partial_answer
                                     )
                                     break
                             except Exception as e:
-                                print(
-                                    f"⚠️ Error generating follow-up queries: {e}"
+                                logger.error(
+                                    "Error generating follow-up queries",
+                                    error=str(e),
+                                    cycle=cycle_number,
                                 )
-                                print(
-                                    "❌ Stopping due to follow-up generation error"
+                                logger.warning(
+                                    "Stopping due to follow-up generation error",
+                                    cycle=cycle_number,
                                 )
                                 reflexion_memory.final_answer = partial_answer
                                 break
                     except Exception as e:
-                        print(f"⚠️ Error in follow-up query handling: {e}")
+                        logger.error(
+                            "Error in follow-up query handling",
+                            error=str(e),
+                            cycle=cycle_number,
+                        )
                         reflexion_memory.final_answer = partial_answer
                         break
 
@@ -336,7 +397,7 @@ class ReflexionRAGEngine:
                 not reflexion_memory.final_answer
                 and len(reflexion_memory.cycles) > 1
             ):
-                print("\n🧠 Synthesizing final comprehensive answer...")
+                logger.info("Synthesizing final comprehensive answer")
                 try:
                     reflexion_memory.final_answer = (
                         await self._synthesize_final_answer(
@@ -344,7 +405,9 @@ class ReflexionRAGEngine:
                         )
                     )
                 except Exception as e:
-                    print(f"⚠️ Error synthesizing final answer: {e}")
+                    logger.error(
+                        "Error synthesizing final answer", error=str(e)
+                    )
                     # Use the best partial answer we have as fallback
                     best_cycle = max(
                         reflexion_memory.cycles,
@@ -354,7 +417,10 @@ class ReflexionRAGEngine:
                         best_cycle.partial_answer
                         or "Error synthesizing final answer."
                     )
-                    print("⚠️ Using best partial answer as fallback")
+                    logger.warning(
+                        "Using best partial answer as fallback",
+                        confidence=best_cycle.evaluation.confidence_score,
+                    )
 
             # Stream final answer
             final_answer = (
@@ -364,8 +430,8 @@ class ReflexionRAGEngine:
 
             # Check if final answer appears truncated
             if self._is_likely_truncated(final_answer):
-                print(
-                    "⚠️ Final answer appears truncated, attempting to complete it..."
+                logger.warning(
+                    "Final answer appears truncated, attempting to complete it"
                 )
                 completion_prompt = f"""Complete this response that was cut off. Maintain the same tone and style:
 
@@ -393,7 +459,7 @@ class ReflexionRAGEngine:
                 try:
                     self.memory_cache.put(query_hash, reflexion_memory)
                 except Exception as e:
-                    print(f"⚠️ Error caching result: {e}")
+                    logger.error("Error caching result", error=str(e))
 
             # Stream final answer with metadata
             try:
@@ -414,7 +480,7 @@ class ReflexionRAGEngine:
                     },
                 )
             except Exception as e:
-                print(f"⚠️ Error streaming final result: {e}")
+                logger.error("Error streaming final result", error=str(e))
                 # Simple fallback with minimal metadata
                 yield StreamingChunk(
                     content=f"\n\n## Final Answer\n\n{final_answer}",
@@ -423,10 +489,7 @@ class ReflexionRAGEngine:
                 )
 
         except Exception as e:
-            error_msg = f"❌ Reflexion loop failed: {e}"
-            print(error_msg)
-            tb_info = traceback.format_exc()
-            print(f"Stack trace:\n{tb_info}")
+            logger.error("Reflexion loop failed", error=str(e), query=question)
 
             # Yield error message to user
             yield StreamingChunk(
@@ -436,10 +499,16 @@ class ReflexionRAGEngine:
 
             # Fallback to simple query
             try:
+                logger.info("Attempting fallback simple query")
                 async for chunk in self.simple_query_stream(question):
                     yield chunk
             except Exception as fallback_error:
                 # Ultimate fallback if simple query also fails
+                logger.critical(
+                    "Both reflexion and fallback methods failed",
+                    original_error=str(e),
+                    fallback_error=str(fallback_error),
+                )
                 yield StreamingChunk(
                     content=f"\n\n❌ **Critical error:** Both reflexion and fallback methods failed. Error: {fallback_error}",
                     is_complete=True,
@@ -478,10 +547,13 @@ class ReflexionRAGEngine:
         self, question: str
     ) -> AsyncIterator[StreamingChunk]:
         """Simple RAG query without reflexion (fallback)"""
-        print("📝 Using simple RAG mode")
+        logger.info("Using simple RAG mode", query=question)
 
         retrieved_docs = await self.vector_store.similarity_search(
-            question, k=settings.retrieval_k
+            question, k=settings.initial_retrieval_k
+        )
+        logger.debug(
+            "Retrieved documents for simple query", count=len(retrieved_docs)
         )
         context = self._prepare_context(retrieved_docs)
         prompt = self._create_simple_prompt(question, context)
@@ -679,15 +751,21 @@ Please consider:
             )
         return "\n".join(context_parts)
 
-    def get_memory_stats(self) -> dict:
-        """Get memory cache statistics"""
+    def get_memory_stats(self) -> Dict:
+        """Get memory cache statistics
+
+        Returns:
+            Dictionary containing memory cache statistics or status
+        """
         if self.memory_cache:
             return self.memory_cache.get_stats()
         return {"cache_disabled": True}
 
-    async def clear_memory_cache(self) -> bool:
+    async def clear_memory_cache(self) -> None:
         """Clear memory cache"""
+        logger.info("Clearing memory cache")
         if self.memory_cache:
             self.memory_cache.clear()
-            return True
-        return False
+            logger.info("Memory cache cleared")
+        else:
+            logger.warning("Memory cache is disabled, nothing to clear")

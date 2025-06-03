@@ -63,23 +63,6 @@ class ReflexionMemoryCache:
         oldest_time = min(self.access_times.values())
         return time.time() - oldest_time
 
-    def cleanup_expired(self, max_age_hours: int = 24) -> int:
-        """Remove entries older than max_age_hours"""
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-
-        expired_keys = [
-            key
-            for key, access_time in self.access_times.items()
-            if current_time - access_time > max_age_seconds
-        ]
-
-        for key in expired_keys:
-            self.cache.pop(key, None)
-            self.access_times.pop(key, None)
-
-        return len(expired_keys)
-
 
 def create_query_hash(query: str) -> str:
     """Create a hash for query caching"""

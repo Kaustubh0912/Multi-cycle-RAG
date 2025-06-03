@@ -8,7 +8,9 @@ from chromadb.config import Settings as ChromaSettings
 from ..config.settings import settings
 from ..core.exceptions import VectorStoreException
 from ..core.interfaces import Document, VectorStoreInterface
+from ..data.processor import DocumentProcessor
 from ..embeddings.huggingface_embeddings import HuggingFaceEmbeddings
+from ..utils.logging import logger
 
 # Define ChromaDB-compatible Metadata type
 ChromaMetadata = Mapping[str, Union[str, int, float, bool, None]]
@@ -44,26 +46,21 @@ class ChromaVectorStore(VectorStoreInterface):
         self, metadatas: List[Dict[str, Any]]
     ) -> List[ChromaMetadata]:
         """Sanitize metadata to ensure ChromaDB compatibility"""
+        doc_processor = DocumentProcessor()
         sanitized: List[ChromaMetadata] = []
+
         for meta in metadatas:
             if not meta:
                 sanitized.append({})
                 continue
 
-            clean_meta: Dict[str, Union[str, int, float, bool, None]] = {}
-            for k, v in meta.items():
-                if v is None:
-                    clean_meta[str(k)] = None  # Keep None as-is
-                elif isinstance(v, bool):
-                    clean_meta[str(k)] = v  # Keep booleans as-is
-                elif isinstance(v, (int, float)):
-                    clean_meta[str(k)] = v  # Keep numbers as-is
-                elif isinstance(v, str):
-                    clean_meta[str(k)] = v  # Keep strings as-is
-                else:
-                    # Convert other types to string
-                    clean_meta[str(k)] = str(v)
-            sanitized.append(clean_meta)
+            # Use centralized metadata sanitization
+            sanitized_meta = doc_processor._sanitize_metadata(meta)
+            sanitized.append(sanitized_meta)
+
+        logger.debug(
+            f"Sanitized {len(metadatas)} metadata entries for ChromaDB"
+        )
         return sanitized
 
     async def add_documents(self, documents: List[Document]) -> List[str]:
@@ -83,6 +80,8 @@ class ChromaVectorStore(VectorStoreInterface):
             sanitized_metadatas: List[ChromaMetadata] = self._sanitize_metadata(
                 metadatas
             )
+
+            logger.info(f"Adding {len(texts)} documents to vector store")
 
             # Generate embeddings efficiently
             embeddings = await self.embedding_function.embed_documents(texts)
@@ -127,6 +126,7 @@ class ChromaVectorStore(VectorStoreInterface):
 
             # Add proper null checks before accessing results
             if not results or not isinstance(results, dict):
+                logger.warning("No results returned from vector database")
                 return []
 
             documents_list = results.get("documents")

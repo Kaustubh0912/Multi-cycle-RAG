@@ -16,7 +16,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from src.config.settings import settings
-from src.rag.engine import AdvancedRAGEngine
+from src.rag.engine import RAGEngine
 
 app = typer.Typer(help="Interactive RAG Chat with Reflexion Loop")
 console = Console()
@@ -24,14 +24,16 @@ console = Console()
 
 class InteractiveRAGChat:
     def __init__(self, docs_path: str):
-        self.rag = AdvancedRAGEngine()
+        self.rag = RAGEngine()
         self.docs_path = docs_path
         self.query_count = 0
 
     async def check_documents_exist(self) -> bool:
         """Check if documents have been ingested"""
         try:
-            results = await self.rag.vector_store.similarity_search("test", k=1)
+            results = await self.rag.engine.vector_store.similarity_search(
+                "test", k=1
+            )  # Add .engine
             return len(results) > 0
         except Exception:
             return False
@@ -235,20 +237,10 @@ class InteractiveRAGChat:
 
     async def clear_cache(self):
         """Clear memory cache if available"""
-        if hasattr(self.rag, "reflexion_engine"):
-            success = await self.rag.reflexion_engine.clear_memory_cache()
-            if success:
-                console.print(
-                    "[bold green]✅ Memory cache cleared successfully.[/bold green]"
-                )
-            else:
-                console.print(
-                    "[yellow]⚠️  Memory cache is disabled or unavailable.[/yellow]"
-                )
-        else:
-            console.print(
-                "[yellow]⚠️  Memory cache not available in current engine mode.[/yellow]"
-            )
+        await self.rag.clear_memory_cache()
+        console.print(
+            "[bold green]✅ Memory cache cleared successfully.[/bold green]"
+        )
 
     async def interactive_menu(self):
         """Show interactive menu for additional options"""

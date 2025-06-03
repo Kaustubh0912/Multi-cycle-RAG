@@ -13,13 +13,17 @@ class ReflexionDecision(Enum):
     COMPLETE = "complete"
     INSUFFICIENT_DATA = "insufficient_data"
 
+    def __str__(self) -> str:
+        """String representation of the decision"""
+        return self.value
+
 
 @dataclass
 class Document:
     """Standard document format across the system"""
 
     content: str
-    metadata: Dict[str, Any]
+    metadata: Dict[str, Any] = field(default_factory=dict)
     doc_id: Optional[str] = None
 
 

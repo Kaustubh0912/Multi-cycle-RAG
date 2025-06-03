@@ -46,7 +46,6 @@ class Settings(BaseSettings):
     embedding_device: str = Field(default="cpu")
 
     # Document processing
-    retrieval_k: int = Field(default=5)
     chunk_size: int = Field(default=1000)
     chunk_overlap: int = Field(default=200)
 

@@ -1,9 +1,8 @@
 from .config.settings import settings
 from .core.interfaces import Document
-from .rag.engine import AdvancedRAGEngine, RAGEngine
+from .rag.engine import RAGEngine
 
 __all__ = [
-    "AdvancedRAGEngine",
     "RAGEngine",
     "Document",
     "settings",

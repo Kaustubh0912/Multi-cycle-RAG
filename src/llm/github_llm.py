@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from azure.ai.inference import ChatCompletionsClient
 from azure.ai.inference.models import (
@@ -7,11 +7,11 @@ from azure.ai.inference.models import (
     UserMessage,
 )
 from azure.core.credentials import AzureKeyCredential
-from typing_extensions import AsyncIterator
 
 from ..config.settings import settings
 from ..core.exceptions import LLMException
 from ..core.interfaces import LLMInterface, StreamingChunk
+from ..utils.logging import logger
 
 
 class GitHubLLM(LLMInterface):
@@ -34,6 +34,7 @@ class GitHubLLM(LLMInterface):
             self.max_tokens = max_tokens_override or settings.llm_max_tokens
 
         except Exception as e:
+            logger.error("GitHub LLM initialization failed", error=str(e))
             raise LLMException(f"Failed to initialize GitHub LLM: {e}")
 
     async def generate_stream(
@@ -78,6 +79,7 @@ class GitHubLLM(LLMInterface):
                     usage_info=usage_info,
                 )
         except Exception as e:
+            logger.error("Streaming generation failed", error=str(e))
             raise LLMException(f"Streaming generation failed: {e}")
 
     async def chat_stream(
@@ -133,4 +135,5 @@ class GitHubLLM(LLMInterface):
                 )
 
         except Exception as e:
+            logger.error("Streaming chat failed", error=str(e))
             raise LLMException(f"Streaming chat failed: {e}")

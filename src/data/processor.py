@@ -1,7 +1,8 @@
-from typing import List
+from typing import Any, Dict, List
 
 from ..config.settings import settings
 from ..core.interfaces import Document
+from ..utils.logging import logger
 
 
 class CustomTextSplitter:
@@ -93,25 +94,15 @@ class DocumentProcessor:
 
             for i, chunk in enumerate(chunks):
                 if chunk.strip():  # Only add non-empty chunks
-                    # 🔥 CRITICAL FIX: Ensure no None values in metadata
-                    chunk_metadata = {}
-
-                    # Copy original metadata, replacing None values
-                    for k, v in doc.metadata.items():
-                        if v is not None:
-                            chunk_metadata[k] = v
-                        else:
-                            chunk_metadata[k] = (
-                                ""  # Replace None with empty string
-                            )
+                    # Sanitize and prepare metadata
+                    chunk_metadata = self._sanitize_metadata(doc.metadata)
 
                     # Add chunk-specific metadata
                     chunk_metadata.update(
                         {
                             "chunk_index": i,
                             "total_chunks": len(chunks),
-                            "original_doc_id": doc.doc_id
-                            or "",  # Ensure not None
+                            "original_doc_id": doc.doc_id or "",
                         }
                     )
 
@@ -120,4 +111,24 @@ class DocumentProcessor:
                         metadata=chunk_metadata,
                     )
                     processed_docs.append(chunk_doc)
+
+        logger.info(
+            f"Processed {len(documents)} documents into {len(processed_docs)} chunks"
+        )
         return processed_docs
+
+    def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Centralized metadata sanitization function"""
+        if not metadata:
+            return {}
+
+        sanitized = {}
+        for k, v in metadata.items():
+            if v is None:
+                sanitized[str(k)] = ""  # Replace None with empty string
+            elif isinstance(v, (str, int, float, bool)):
+                sanitized[str(k)] = v  # Keep primitive types as-is
+            else:
+                sanitized[str(k)] = str(v)  # Convert other types to string
+
+        return sanitized
