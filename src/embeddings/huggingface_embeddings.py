@@ -22,9 +22,7 @@ class HuggingFaceEmbeddings(EmbeddingInterface):
             )
             if hasattr(self.model, "encode"):
                 encode_method = cast(Any, self.model.encode)
-                self.model.encode = torch.compile(
-                    encode_method, mode="reduce-overhead"
-                )
+                self.model.encode = torch.compile(encode_method, mode="reduce-overhead")
 
         except Exception as e:
             raise EmbeddingException(f"Failed to load embedding model: {e}")

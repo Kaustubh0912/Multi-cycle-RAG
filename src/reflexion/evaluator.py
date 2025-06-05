@@ -63,9 +63,7 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
         try:
             # Get evaluation from LLM
             response_chunks = []
-            async for chunk in self.evaluation_llm.generate_stream(
-                evaluation_prompt
-            ):
+            async for chunk in self.evaluation_llm.generate_stream(evaluation_prompt):
                 response_chunks.append(chunk.content)
 
             evaluation_response = "".join(response_chunks)
@@ -113,9 +111,7 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
 
         try:
             response_chunks = []
-            async for chunk in self.evaluation_llm.generate_stream(
-                follow_up_prompt
-            ):
+            async for chunk in self.evaluation_llm.generate_stream(follow_up_prompt):
                 response_chunks.append(chunk.content)
 
             response = "".join(response_chunks)
@@ -137,9 +133,7 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
     ) -> str:
         """Create evaluation prompt for confidence assessment"""
 
-        docs_summary = (
-            f"Retrieved {len(retrieved_docs)} documents from knowledge base."
-        )
+        docs_summary = f"Retrieved {len(retrieved_docs)} documents from knowledge base."
         if retrieved_docs:
             docs_preview = "\n".join(
                 [
@@ -245,19 +239,13 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
                 )
 
                 return ReflexionEvaluation(
-                    confidence_score=float(
-                        eval_data.get("confidence_score", 0.5)
-                    ),
+                    confidence_score=float(eval_data.get("confidence_score", 0.5)),
                     decision=decision,
-                    reasoning=eval_data.get(
-                        "reasoning", "No reasoning provided"
-                    ),
+                    reasoning=eval_data.get("reasoning", "No reasoning provided"),
                     follow_up_queries=eval_data.get("specific_gaps", []),
                     covered_aspects=eval_data.get("covered_aspects", []),
                     missing_aspects=eval_data.get("missing_aspects", []),
-                    uncertainty_phrases=eval_data.get(
-                        "uncertainty_phrases", []
-                    ),
+                    uncertainty_phrases=eval_data.get("uncertainty_phrases", []),
                 )
         except (json.JSONDecodeError, KeyError, ValueError):
             # Fallback parsing if JSON fails
@@ -304,9 +292,7 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
             covered_aspects=[],
             missing_aspects=[],
             uncertainty_phrases=[
-                phrase
-                for phrase in self.uncertainty_phrases
-                if phrase in answer_lower
+                phrase for phrase in self.uncertainty_phrases if phrase in answer_lower
             ],
         )
 

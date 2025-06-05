@@ -25,9 +25,7 @@ class ChromaVectorStore(VectorStoreInterface):
             # Initialize ChromaDB with persistence
             self.client = chromadb.PersistentClient(
                 path=settings.chroma_persist_directory,
-                settings=ChromaSettings(
-                    anonymized_telemetry=False, allow_reset=True
-                ),
+                settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
             )
 
             # Initialize embedding function
@@ -58,9 +56,7 @@ class ChromaVectorStore(VectorStoreInterface):
             sanitized_meta = doc_processor._sanitize_metadata(meta)
             sanitized.append(sanitized_meta)
 
-        logger.debug(
-            f"Sanitized {len(metadatas)} metadata entries for ChromaDB"
-        )
+        logger.debug(f"Sanitized {len(metadatas)} metadata entries for ChromaDB")
         return sanitized
 
     async def add_documents(self, documents: List[Document]) -> List[str]:
@@ -90,9 +86,7 @@ class ChromaVectorStore(VectorStoreInterface):
             processed_embeddings: List[np.ndarray] = []
             for embedding in embeddings:
                 if isinstance(embedding, list):
-                    processed_embeddings.append(
-                        np.array(embedding, dtype=np.float32)
-                    )
+                    processed_embeddings.append(np.array(embedding, dtype=np.float32))
                 else:
                     processed_embeddings.append(embedding)
 
@@ -145,18 +139,12 @@ class ChromaVectorStore(VectorStoreInterface):
             for i in range(doc_count):
                 # Safely access documents
                 content = (
-                    documents_list[0][i]
-                    if documents_list and documents_list[0]
-                    else ""
+                    documents_list[0][i] if documents_list and documents_list[0] else ""
                 )
 
                 # Safely access metadata with type conversion
                 metadata_raw = None
-                if (
-                    metadatas_list
-                    and metadatas_list[0]
-                    and i < len(metadatas_list[0])
-                ):
+                if metadatas_list and metadatas_list[0] and i < len(metadatas_list[0]):
                     metadata_raw = metadatas_list[0][i]
 
                 # Convert metadata to proper Dict[str, Any] format
@@ -175,15 +163,9 @@ class ChromaVectorStore(VectorStoreInterface):
 
                 # Safely access distance and calculate similarity score
                 similarity_score = 0.0
-                if (
-                    distances_list
-                    and distances_list[0]
-                    and i < len(distances_list[0])
-                ):
+                if distances_list and distances_list[0] and i < len(distances_list[0]):
                     distance = distances_list[0][i]
-                    similarity_score = (
-                        1 - distance if distance is not None else 0.0
-                    )
+                    similarity_score = 1 - distance if distance is not None else 0.0
 
                 metadata["similarity_score"] = similarity_score
 
@@ -197,9 +179,7 @@ class ChromaVectorStore(VectorStoreInterface):
             return documents
 
         except Exception as e:
-            raise VectorStoreException(
-                f"Failed to perform similarity search: {e}"
-            )
+            raise VectorStoreException(f"Failed to perform similarity search: {e}")
 
     async def delete_documents(self, doc_ids: List[str]) -> bool:
         """Delete documents by IDs"""

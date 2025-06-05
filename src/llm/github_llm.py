@@ -64,12 +64,8 @@ class GitHubLLM(LLMInterface):
                         "completion_tokens": getattr(
                             update.usage, "completion_tokens", 0
                         ),
-                        "prompt_tokens": getattr(
-                            update.usage, "prompt_tokens", 0
-                        ),
-                        "total_tokens": getattr(
-                            update.usage, "total_tokens", 0
-                        ),
+                        "prompt_tokens": getattr(update.usage, "prompt_tokens", 0),
+                        "total_tokens": getattr(update.usage, "total_tokens", 0),
                     }
                     is_complete = True
 
@@ -119,12 +115,8 @@ class GitHubLLM(LLMInterface):
                         "completion_tokens": getattr(
                             update.usage, "completion_tokens", 0
                         ),
-                        "prompt_tokens": getattr(
-                            update.usage, "prompt_tokens", 0
-                        ),
-                        "total_tokens": getattr(
-                            update.usage, "total_tokens", 0
-                        ),
+                        "prompt_tokens": getattr(update.usage, "prompt_tokens", 0),
+                        "total_tokens": getattr(update.usage, "total_tokens", 0),
                     }
                     is_complete = True
 
