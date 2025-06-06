@@ -6,7 +6,7 @@ DEFINE FIELD embedding ON documents TYPE array<float>;
 DEFINE INDEX hnsw_embedding ON documents
 FIELDS embedding
 HNSW
-DIMENSION 384
+DIMENSION 3072
 DIST COSINE
 TYPE F32
 EFC 500
