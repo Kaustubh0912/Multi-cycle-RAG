@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     chroma_collection_name: str = Field(default="rag_collection")
 
     # Embedding
-    embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
+    embedding_model: str = Field(default="all-MiniLM-L6-v2")
     embedding_device: str = Field(default="cpu")
 
     # Document processing

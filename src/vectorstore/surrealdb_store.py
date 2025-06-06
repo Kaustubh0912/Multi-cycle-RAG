@@ -95,7 +95,6 @@ class SurrealDBVectorStore(VectorStoreInterface):
         except Exception as e:
             raise VectorStoreException(f"Failed to add documents: {str(e)}")
 
-    # ✅ ALTERNATIVE: Use your predefined function
     async def similarity_search(self, query: str, k: int = 5) -> List[Document]:
         """Perform vector similarity search using predefined function"""
         await self._ensure_connection()
@@ -111,20 +110,36 @@ class SurrealDBVectorStore(VectorStoreInterface):
             """,
                 {
                     "query_embedding": query_embedding,
-                    "k": k,  # This works because it's a function parameter, not vector syntax
+                    "k": k,
                 },
             )
+            print(f"Raw results: {results}")
+            print(f"Type of results: {type(results)}")
+            print(
+                f"Type of results[0]: {type(results[0]) if results else 'No results'}"
+            )
 
-            if not results or not results[0].get("result"):
+            # Check if we have results
+            if not results or len(results) == 0:
                 return []
 
-            # The function returns the documents directly
-            search_results = results[0]["result"]
+            # Access the actual search results - they should be directly in results[0]
+            search_results = (
+                results[0] if isinstance(results[0], list) else results
+            )
+
+            # Additional safety check
+            if not search_results:
+                return []
 
             documents = []
             for result in search_results:
+                # Make sure result is a dictionary
+                if not isinstance(result, dict):
+                    continue
+
                 doc = Document(
-                    content=result["content"],
+                    content=result.get("content", ""),
                     metadata={
                         **result.get("metadata", {}),
                         "similarity_score": result.get("score", 0.0),
@@ -137,7 +152,9 @@ class SurrealDBVectorStore(VectorStoreInterface):
             return documents
 
         except Exception as e:
-            raise VectorStoreException(f"Similarity search failed: {str(e)}")
+            logger.error(f"Error in similarity search: {e}")
+            print(f"Full error details: {type(e).__name__}: {e}")
+            return []
 
     async def delete_documents(self, doc_ids: List[str]) -> bool:
         """Delete documents by IDs"""

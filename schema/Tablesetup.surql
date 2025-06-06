@@ -3,7 +3,14 @@ DEFINE TABLE documents SCHEMAFULL;
 DEFINE FIELD content ON documents TYPE string;
 DEFINE FIELD metadata ON documents TYPE object;
 DEFINE FIELD embedding ON documents TYPE array<float>;
-DEFINE INDEX hnsw_embedding ON documents FIELDS embedding HNSW DIMENSION 384;
+DEFINE INDEX hnsw_embedding ON documents
+FIELDS embedding
+HNSW
+DIMENSION 384
+DIST COSINE
+TYPE F32
+EFC 500
+M 16;
 
 -- Define embedding model reference
 DEFINE TABLE embedding_model SCHEMAFULL;
@@ -13,12 +20,12 @@ DEFINE FIELD dimensions ON embedding_model TYPE int;
 
 DEFINE FUNCTION fn::similarity_search($query_embedding: array<float>, $k: int) {
     LET $limit = $k ?? 5;
-    SELECT id, content, metadata,
+    return SELECT id, content, metadata,
            vector::similarity::cosine(embedding, $query_embedding) AS score
     FROM documents
-    WHERE embedding <|50,COSINE|> $query_embedding
+    WHERE embedding <|300,COSINE|> $query_embedding
     ORDER BY score DESC
-    LIMIT $limit;
+    LIMIT $limit
 };
 DEFINE FUNCTION fn::hybrid_search($query_text: string, $query_embedding: array<float>, $k: int) {
     LET $limit = $k ?? 5;
@@ -26,8 +33,9 @@ DEFINE FUNCTION fn::hybrid_search($query_text: string, $query_embedding: array<f
            (vector::similarity::cosine(embedding, $query_embedding) * 0.7) +
            (search::score($query_text) * 0.3) AS combined_score
     FROM documents
-    WHERE embedding <|50,COSINE|> $query_embedding
+    WHERE embedding <|300,COSINE|> $query_embedding
        OR content @1@ $query_text
     ORDER BY combined_score DESC
-    LIMIT $limit;
+    LIMIT $limit
+
 };
