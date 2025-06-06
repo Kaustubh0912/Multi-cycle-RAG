@@ -1,4 +1,3 @@
-# src/vectorstore/surrealdb_store.py
 import uuid
 from typing import Any, Dict, List
 
@@ -22,18 +21,22 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
     async def _ensure_connection(self):
         """Ensure database connection and schema"""
-        if self.connected:
+        if self.connected and self.client is not None:
             return
 
         try:
+            # Initialize the client
             self.client = AsyncSurreal(settings.surrealdb_url)
-            await self.client.use(settings.surrealdb_ns, settings.surrealdb_db)
+
+            # Connect and authenticate
+            await self.client.connect(settings.surrealdb_url)
             await self.client.signin(
                 {
                     "username": settings.surrealdb_user,
                     "password": settings.surrealdb_pass,
                 }
             )
+            await self.client.use(settings.surrealdb_ns, settings.surrealdb_db)
 
             # Ensure schema exists
             await self._setup_schema()
@@ -41,10 +44,14 @@ class SurrealDBVectorStore(VectorStoreInterface):
             logger.info("SurrealDB connection established")
 
         except Exception as e:
+            logger.error(f"SurrealDB connection failed: {str(e)}")
             raise VectorStoreException(f"Connection failed: {str(e)}")
 
     async def _setup_schema(self):
         """Setup vector storage schema"""
+        if not self.client:
+            raise VectorStoreException("Client not initialized")
+
         schema_queries = [
             "DEFINE TABLE IF NOT EXISTS documents SCHEMAFULL;",
             "DEFINE FIELD IF NOT EXISTS content ON documents TYPE string;",
@@ -54,7 +61,11 @@ class SurrealDBVectorStore(VectorStoreInterface):
         ]
 
         for query in schema_queries:
-            await self.client.query(query)
+            try:
+                await self.client.query(query)
+            except Exception as e:
+                logger.error(f"Schema setup error for query '{query}': {e}")
+                raise VectorStoreException(f"Schema setup failed: {e}")
 
     async def add_documents(self, documents: List[Document]) -> List[str]:
         """Add documents with embeddings to SurrealDB"""
@@ -62,6 +73,9 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
         if not documents:
             return []
+
+        if not self.client:
+            raise VectorStoreException("Client not connected")
 
         try:
             # Generate embeddings for all documents
@@ -77,7 +91,8 @@ class SurrealDBVectorStore(VectorStoreInterface):
                 # Sanitize metadata
                 clean_metadata = self._sanitize_metadata(doc.metadata)
 
-                result = await self.client.create(
+                # Create document in SurrealDB
+                await self.client.create(
                     "documents",
                     {
                         "id": doc_id,
@@ -93,48 +108,52 @@ class SurrealDBVectorStore(VectorStoreInterface):
             return doc_ids
 
         except Exception as e:
+            logger.error(f"Failed to add documents: {str(e)}")
             raise VectorStoreException(f"Failed to add documents: {str(e)}")
 
     async def similarity_search(self, query: str, k: int = 5) -> List[Document]:
-        """Perform vector similarity search using predefined function"""
+        """Perform vector similarity search"""
         await self._ensure_connection()
+
+        if not self.client:
+            raise VectorStoreException("Client not connected")
 
         try:
             # Generate query embedding
             query_embedding = await self.embedding_function.embed_text(query)
 
-            # Use your predefined function
+            # Perform similarity search using SurrealDB query
             results = await self.client.query(
                 """
-                RETURN fn::similarity_search($query_embedding, $k);
-            """,
+                SELECT id, content, metadata,
+                       vector::similarity::cosine(embedding, $query_embedding) AS score
+                FROM documents
+                WHERE embedding IS NOT NONE
+                ORDER BY score DESC
+                LIMIT $k;
+                """,
                 {
                     "query_embedding": query_embedding,
                     "k": k,
                 },
             )
-            print(f"Raw results: {results}")
-            print(f"Type of results: {type(results)}")
-            print(
-                f"Type of results[0]: {type(results[0]) if results else 'No results'}"
-            )
+
+            logger.debug(f"Raw SurrealDB results: {results}")
 
             # Check if we have results
             if not results or len(results) == 0:
+                logger.warning("No results returned from SurrealDB")
                 return []
 
-            # Access the actual search results - they should be directly in results[0]
-            search_results = (
-                results[0] if isinstance(results[0], list) else results
-            )
+            # Extract results from SurrealDB response
+            search_results = results[0] if isinstance(results[0], list) else []
 
-            # Additional safety check
             if not search_results:
+                logger.warning("Empty search results")
                 return []
 
             documents = []
             for result in search_results:
-                # Make sure result is a dictionary
                 if not isinstance(result, dict):
                     continue
 
@@ -152,13 +171,15 @@ class SurrealDBVectorStore(VectorStoreInterface):
             return documents
 
         except Exception as e:
-            logger.error(f"Error in similarity search: {e}")
-            print(f"Full error details: {type(e).__name__}: {e}")
+            logger.error(f"Similarity search error: {e}")
             return []
 
     async def delete_documents(self, doc_ids: List[str]) -> bool:
         """Delete documents by IDs"""
         await self._ensure_connection()
+
+        if not self.client:
+            raise VectorStoreException("Client not connected")
 
         try:
             if doc_ids:
@@ -166,6 +187,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
                     await self.client.delete(f"documents:{doc_id}")
             return True
         except Exception as e:
+            logger.error(f"Failed to delete documents: {str(e)}")
             raise VectorStoreException(f"Failed to delete documents: {str(e)}")
 
     def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -189,3 +211,4 @@ class SurrealDBVectorStore(VectorStoreInterface):
         if self.client:
             await self.client.close()
             self.connected = False
+            logger.info("SurrealDB connection closed")
