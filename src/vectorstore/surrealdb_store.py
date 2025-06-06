@@ -121,39 +121,22 @@ class SurrealDBVectorStore(VectorStoreInterface):
         try:
             # Generate query embedding
             query_embedding = await self.embedding_function.embed_text(query)
-
+            query = f"""
+            fn::similarity_search({query_embedding}, {k});
+            """
             # Perform similarity search using SurrealDB query
-            results = await self.client.query(
-                """
-                SELECT id, content, metadata,
-                       vector::similarity::cosine(embedding, $query_embedding) AS score
-                FROM documents
-                WHERE embedding IS NOT NONE
-                ORDER BY score DESC
-                LIMIT $k;
-                """,
-                {
-                    "query_embedding": query_embedding,
-                    "k": k,
-                },
-            )
+            results = await self.client.query(query)
 
             logger.debug(f"Raw SurrealDB results: {results}")
-
             # Check if we have results
+
             if not results or len(results) == 0:
                 logger.warning("No results returned from SurrealDB")
                 return []
 
             # Extract results from SurrealDB response
-            search_results = results[0] if isinstance(results[0], list) else []
-
-            if not search_results:
-                logger.warning("Empty search results")
-                return []
-
             documents = []
-            for result in search_results:
+            for result in results:
                 if not isinstance(result, dict):
                     continue
 
