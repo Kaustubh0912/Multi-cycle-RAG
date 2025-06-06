@@ -7,6 +7,15 @@ class Settings(BaseSettings):
     Application settings with environment variable support
     """
 
+    # SurrealDB Configuration
+    surrealdb_url: str = Field(
+        default="wss://cloakystores-06a9f7u3jlrsf43q77o8ttu1kk.aws-euw1.surreal.cloud"
+    )
+    surrealdb_user: str = Field(default="your_username")
+    surrealdb_pass: str = Field(default="your_password")
+    surrealdb_ns: str = Field(default="rag")
+    surrealdb_db: str = Field(default="rag")
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     # Authentication
