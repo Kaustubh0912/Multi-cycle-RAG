@@ -6,7 +6,7 @@ from surrealdb import AsyncSurreal
 from ..config.settings import settings
 from ..core.exceptions import VectorStoreException
 from ..core.interfaces import Document, VectorStoreInterface
-from ..embeddings.huggingface_embeddings import HuggingFaceEmbeddings
+from ..embeddings.github_embeddings import GithubEmbeddings
 from ..utils.logging import logger
 
 
@@ -17,7 +17,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
         super().__init__()
         self.client = None
         self.connected = False
-        self.embedding_function = HuggingFaceEmbeddings()
+        self.embedding_function = GithubEmbeddings()
 
     async def _ensure_connection(self):
         """Ensure database connection and schema"""

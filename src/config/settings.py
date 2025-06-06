@@ -46,13 +46,12 @@ class Settings(BaseSettings):
     enable_memory_cache: bool = Field(default=True)
     max_cache_size: int = Field(default=100)
 
-    # Vector store
-    chroma_persist_directory: str = Field(default="./chroma_db")
-    chroma_collection_name: str = Field(default="rag_collection")
-
     # Embedding
-    embedding_model: str = Field(default="all-MiniLM-L6-v2")
-    embedding_device: str = Field(default="cpu")
+    embedding_model: str = Field(default="text-embedding-3-large")
+    embedding_endpoint: str = Field(
+        default="https://models.inference.ai.azure.com"
+    )
+    embedding_batch_size: int = Field(default=100)
 
     # Document processing
     chunk_size: int = Field(default=1000)
