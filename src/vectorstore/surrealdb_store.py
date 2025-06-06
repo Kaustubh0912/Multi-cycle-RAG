@@ -57,7 +57,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
             "DEFINE FIELD IF NOT EXISTS content ON documents TYPE string;",
             "DEFINE FIELD IF NOT EXISTS metadata ON documents TYPE object;",
             "DEFINE FIELD IF NOT EXISTS embedding ON documents TYPE array<float>;",
-            "DEFINE INDEX IF NOT EXISTS hnsw_embedding ON documents FIELDS embedding HNSW DIMENSION 384 DIST COSINE;",
+            "DEFINE INDEX IF NOT EXISTS hnsw_embedding ON documents FIELDS embedding HNSW DIMENSION 3072 DIST COSINE;",
         ]
 
         for query in schema_queries:
@@ -166,7 +166,6 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
         try:
             result = await self.client.query("fn::countdocs()")
-            print(result)
             logger.debug(f"Document count result: {result}")
 
             # Extract the count from the result

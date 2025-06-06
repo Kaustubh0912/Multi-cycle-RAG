@@ -1,6 +1,8 @@
-Based on your Azure AI Inference embeddings integration changes, here's the updated README.md for your Reflexion RAG Engine:
-
 # Reflexion RAG Engine
+
+<div align="center">
+  <img src="Images/banner1.png" alt="Reflexion RAG Engine - Advanced AI-Powered Document Analysis" width="100%" />
+</div>
 
 A streamlined Retrieval Augmented Generation system with focused reflexion loop architecture. Built for complex reasoning tasks that require iterative refinement and self-evaluation.
 
