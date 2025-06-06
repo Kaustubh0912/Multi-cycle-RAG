@@ -31,12 +31,17 @@ class InteractiveRAGChat:
     async def check_documents_exist(self) -> bool:
         """Check if documents have been ingested"""
         try:
-            results = await self.rag.engine.vector_store.similarity_search(
-                "test", k=1
-            )  # Add .engine
-            return len(results) > 0
+            count = await self.rag.count_documents()
+            return count > 0
         except Exception:
             return False
+
+    async def get_document_count(self) -> int:
+        """Get the count of documents in the vector store"""
+        try:
+            return await self.rag.count_documents()
+        except Exception:
+            return 0
 
     async def process_query_with_thinking(self, question: str):
         """Process query with reflexion loop"""
@@ -242,6 +247,49 @@ class InteractiveRAGChat:
             "[bold green]✅ Memory cache cleared successfully.[/bold green]"
         )
 
+    async def delete_all_documents(self):
+        """Delete all documents from the vector store"""
+        # Show current document count
+        current_count = await self.get_document_count()
+
+        if current_count == 0:
+            console.print(
+                "[yellow]⚠️  No documents found in vector store.[/yellow]"
+            )
+            return
+
+        console.print(
+            f"[yellow]⚠️  Warning: This will delete all {current_count} documents from the vector store![/yellow]"
+        )
+
+        # Confirm deletion
+        confirm = Prompt.ask(
+            "[bold red]Type 'CONFIRM' to proceed with deletion[/bold red]",
+            default="",
+        )
+
+        if confirm.strip() != "CONFIRM":
+            console.print("[yellow]❌ Deletion cancelled.[/yellow]")
+            return
+
+        try:
+            console.print("[bold red]🗑️  Deleting all documents...[/bold red]")
+            success = await self.rag.delete_all_documents("CONFIRM")
+
+            if success:
+                console.print(
+                    "[bold green]✅ All documents deleted successfully![/bold green]"
+                )
+            else:
+                console.print(
+                    "[bold red]❌ Failed to delete documents.[/bold red]"
+                )
+
+        except Exception as e:
+            console.print(
+                f"[bold red]❌ Error deleting documents: {e}[/bold red]"
+            )
+
     async def interactive_menu(self):
         """Show interactive menu for additional options"""
         while True:
@@ -249,12 +297,13 @@ class InteractiveRAGChat:
             console.print("1. Show engine status")
             console.print("2. Clear memory cache")
             console.print("3. Re-ingest documents")
-            console.print("4. Return to chat")
+            console.print("4. Delete all documents")
+            console.print("5. Return to chat")
 
             choice = Prompt.ask(
                 "Select an option",
-                choices=["1", "2", "3", "4"],
-                default="4",
+                choices=["1", "2", "3", "4", "5"],
+                default="5",
             )
 
             if choice == "1":
@@ -264,6 +313,8 @@ class InteractiveRAGChat:
             elif choice == "3":
                 await self.ingest_documents(force_ingest=True)
             elif choice == "4":
+                await self.delete_all_documents()
+            elif choice == "5":
                 break
 
 
@@ -291,12 +342,16 @@ def chat(
         )
 
         # Check if documents exist
-        docs_exist = await chat.check_documents_exist()
+        doc_count = await chat.get_document_count()
 
-        if force_ingest or ingest or not docs_exist:
-            if not docs_exist:
+        if force_ingest or ingest or doc_count == 0:
+            if doc_count == 0:
                 console.print(
                     "[yellow]⚠️  No documents found in vector store.[/yellow]"
+                )
+            else:
+                console.print(
+                    f"[yellow]📚 Current documents in store: {doc_count}[/yellow]"
                 )
             success = await chat.ingest_documents()
             if not success:
@@ -306,7 +361,7 @@ def chat(
                 return
         else:
             console.print(
-                "[green]✅ Using existing documents in vector store.[/green]"
+                f"[green]✅ Using existing {doc_count} documents in vector store.[/green]"
             )
 
         # Show initial engine status
@@ -362,15 +417,34 @@ def ingest(
     async def ingest_main():
         chat = InteractiveRAGChat(docs_path)
         console.print("[bold blue]📥 Document Ingestion Mode[/bold blue]")
+
+        # Show current document count
+        current_count = await chat.get_document_count()
+        console.print(f"[dim]Current documents in store: {current_count}[/dim]")
+
         success = await chat.ingest_documents()
         if success:
+            # Show new count
+            new_count = await chat.get_document_count()
             console.print(
-                "[bold green]✅ Ingestion completed successfully![/bold green]"
+                f"[bold green]✅ Ingestion completed successfully! Total documents: {new_count}[/bold green]"
             )
         else:
             console.print("[bold red]❌ Ingestion failed![/bold red]")
 
     asyncio.run(ingest_main())
+
+
+@app.command()
+def delete():
+    """Delete all documents from the vector store"""
+
+    async def delete_main():
+        chat = InteractiveRAGChat("./docs")  # Path doesn't matter for delete
+        console.print("[bold red]🗑️  Document Deletion Mode[/bold red]")
+        await chat.delete_all_documents()
+
+    asyncio.run(delete_main())
 
 
 @app.command()

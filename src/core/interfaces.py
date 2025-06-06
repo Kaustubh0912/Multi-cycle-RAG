@@ -90,7 +90,11 @@ class ReflexionMemory:
 
     def get_all_partial_answers(self) -> List[str]:
         """Get all partial answers from cycles"""
-        return [cycle.partial_answer for cycle in self.cycles if cycle.partial_answer]
+        return [
+            cycle.partial_answer
+            for cycle in self.cycles
+            if cycle.partial_answer
+        ]
 
     def get_all_retrieved_docs(self) -> List[Document]:
         """Get all unique retrieved documents"""
@@ -161,8 +165,13 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    async def delete_documents(self, doc_ids: List[str]) -> bool:
-        """Delete documents by IDs"""
+    async def count_documents(self) -> int:
+        """Count total number of documents in the vector store"""
+        pass
+
+    @abstractmethod
+    async def delete_all_documents(self, confirm_string: str) -> bool:
+        """Delete all documents from the vector store"""
         pass
 
 

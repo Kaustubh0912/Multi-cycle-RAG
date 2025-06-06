@@ -157,21 +157,54 @@ class SurrealDBVectorStore(VectorStoreInterface):
             logger.error(f"Similarity search error: {e}")
             return []
 
-    async def delete_documents(self, doc_ids: List[str]) -> bool:
-        """Delete documents by IDs"""
+    async def count_documents(self) -> int:
+        """Get count of documents in the vector store"""
         await self._ensure_connection()
 
         if not self.client:
             raise VectorStoreException("Client not connected")
 
         try:
-            if doc_ids:
-                for doc_id in doc_ids:
-                    await self.client.delete(f"documents:{doc_id}")
-            return True
+            result = await self.client.query("fn::countdocs()")
+            print(result)
+            logger.debug(f"Document count result: {result}")
+
+            # Extract the count from the result
+            if isinstance(result, int):
+                return result
+            return 0
+
         except Exception as e:
-            logger.error(f"Failed to delete documents: {str(e)}")
-            raise VectorStoreException(f"Failed to delete documents: {str(e)}")
+            logger.error(f"Failed to count documents: {str(e)}")
+            return 0
+
+    async def delete_all_documents(self, confirm_string: str) -> bool:
+        """Delete all documents from the vector store"""
+        await self._ensure_connection()
+
+        if not self.client:
+            raise VectorStoreException("Client not connected")
+
+        try:
+            result = await self.client.query(f"fn::deldocs('{confirm_string}')")
+            logger.debug(f"Delete all documents result: {result}")
+
+            if isinstance(result, str):
+                success = result.strip().upper() == "DELETED"
+                if success:
+                    logger.info("All documents deleted successfully")
+                else:
+                    logger.warning(f"Delete operation returned: {result}")
+                return success
+
+            logger.warning("Unexpected response format from delete operation")
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to delete all documents: {str(e)}")
+            raise VectorStoreException(
+                f"Failed to delete all documents: {str(e)}"
+            )
 
     def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize metadata for SurrealDB storage"""
