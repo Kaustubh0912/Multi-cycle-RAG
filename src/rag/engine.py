@@ -87,3 +87,30 @@ class RAGEngine:
         """
         logger.info("Clearing RAG engine memory cache")
         await self.engine.clear_memory_cache()
+
+    async def count_documents(self) -> int:
+        """
+        Count documents in the vector store
+
+        Returns:
+            Number of documents in the vector store
+        """
+        logger.info("Counting documents in vector store")
+        return await self.engine.vector_store.count_documents()
+
+    async def delete_all_documents(
+        self, confirm_string: str = "CONFIRM"
+    ) -> bool:
+        """
+        Delete all documents from the vector store
+
+        Args:
+            confirm_string: Confirmation string (must be "CONFIRM" in caps)
+
+        Returns:
+            True if documents were deleted successfully, False otherwise
+        """
+        logger.info("Deleting all documents from vector store")
+        return await self.engine.vector_store.delete_all_documents(
+            confirm_string
+        )

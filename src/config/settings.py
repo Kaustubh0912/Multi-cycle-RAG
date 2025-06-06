@@ -7,6 +7,15 @@ class Settings(BaseSettings):
     Application settings with environment variable support
     """
 
+    # SurrealDB Configuration
+    surrealdb_url: str = Field(
+        default="wss://cloakystores-06a9f7u3jlrsf43q77o8ttu1kk.aws-euw1.surreal.cloud"
+    )
+    surrealdb_user: str = Field(default="your_username")
+    surrealdb_pass: str = Field(default="your_password")
+    surrealdb_ns: str = Field(default="rag")
+    surrealdb_db: str = Field(default="rag")
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     # Authentication
@@ -37,13 +46,12 @@ class Settings(BaseSettings):
     enable_memory_cache: bool = Field(default=True)
     max_cache_size: int = Field(default=100)
 
-    # Vector store
-    chroma_persist_directory: str = Field(default="./chroma_db")
-    chroma_collection_name: str = Field(default="rag_collection")
-
     # Embedding
-    embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
-    embedding_device: str = Field(default="cpu")
+    embedding_model: str = Field(default="text-embedding-3-large")
+    embedding_endpoint: str = Field(
+        default="https://models.inference.ai.azure.com"
+    )
+    embedding_batch_size: int = Field(default=100)
 
     # Document processing
     chunk_size: int = Field(default=1000)
