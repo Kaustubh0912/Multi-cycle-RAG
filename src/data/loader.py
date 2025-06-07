@@ -26,18 +26,18 @@ class DocumentLoader:
             )
 
             # Load Documents
-            llama_docs = reader.load_data()
+            docs = reader.load_data()
 
             # Convert to our document format
             documents = []
-            for llama_doc in llama_docs:
+            for doc in docs:
                 doc = Document(
-                    content=llama_doc.text,
+                    content=doc.text,
                     metadata={
-                        "source": str(llama_doc.metadata.get("file_path", "")),
-                        "file_name": llama_doc.metadata.get("file_name", ""),
-                        "file_type": llama_doc.metadata.get("file_type", ""),
-                        **llama_doc.metadata,
+                        "source": str(doc.metadata.get("file_path", "")),
+                        "file_name": doc.metadata.get("file_name", ""),
+                        "file_type": doc.metadata.get("file_type", ""),
+                        **doc.metadata,
                     },
                 )
                 documents.append(doc)

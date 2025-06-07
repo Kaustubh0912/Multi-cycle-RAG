@@ -201,9 +201,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
         except Exception as e:
             logger.error(f"Failed to delete all documents: {str(e)}")
-            raise VectorStoreException(
-                f"Failed to delete all documents: {str(e)}"
-            )
+            raise VectorStoreException(f"Failed to delete all documents: {str(e)}")
 
     def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize metadata for SurrealDB storage"""

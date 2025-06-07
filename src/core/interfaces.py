@@ -90,11 +90,7 @@ class ReflexionMemory:
 
     def get_all_partial_answers(self) -> List[str]:
         """Get all partial answers from cycles"""
-        return [
-            cycle.partial_answer
-            for cycle in self.cycles
-            if cycle.partial_answer
-        ]
+        return [cycle.partial_answer for cycle in self.cycles if cycle.partial_answer]
 
     def get_all_retrieved_docs(self) -> List[Document]:
         """Get all unique retrieved documents"""

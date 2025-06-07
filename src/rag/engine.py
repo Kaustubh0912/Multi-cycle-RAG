@@ -98,9 +98,7 @@ class RAGEngine:
         logger.info("Counting documents in vector store")
         return await self.engine.vector_store.count_documents()
 
-    async def delete_all_documents(
-        self, confirm_string: str = "CONFIRM"
-    ) -> bool:
+    async def delete_all_documents(self, confirm_string: str = "CONFIRM") -> bool:
         """
         Delete all documents from the vector store
 
@@ -111,6 +109,4 @@ class RAGEngine:
             True if documents were deleted successfully, False otherwise
         """
         logger.info("Deleting all documents from vector store")
-        return await self.engine.vector_store.delete_all_documents(
-            confirm_string
-        )
+        return await self.engine.vector_store.delete_all_documents(confirm_string)

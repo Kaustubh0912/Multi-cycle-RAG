@@ -48,9 +48,7 @@ class Settings(BaseSettings):
 
     # Embedding
     embedding_model: str = Field(default="text-embedding-3-large")
-    embedding_endpoint: str = Field(
-        default="https://models.inference.ai.azure.com"
-    )
+    embedding_endpoint: str = Field(default="https://models.inference.ai.azure.com")
     embedding_batch_size: int = Field(default=100)
 
     # Document processing

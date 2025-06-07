@@ -25,9 +25,7 @@ class GithubEmbeddings(EmbeddingInterface):
         self.token = token or settings.github_token
 
         if not self.token:
-            raise EmbeddingException(
-                "GitHub token is required for Azure AI Inference"
-            )
+            raise EmbeddingException("GitHub token is required for Azure AI Inference")
 
         try:
             self.client = EmbeddingsClient(
@@ -41,9 +39,7 @@ class GithubEmbeddings(EmbeddingInterface):
                 endpoint=self.endpoint,
             )
         except Exception as e:
-            raise EmbeddingException(
-                f"Failed to initialize Azure AI embeddings: {e}"
-            )
+            raise EmbeddingException(f"Failed to initialize Azure AI embeddings: {e}")
 
     def _usage_to_dict(self, usage) -> dict:
         """Convert EmbeddingsUsage to dictionary"""
@@ -91,9 +87,7 @@ class GithubEmbeddings(EmbeddingInterface):
             return embedding
 
         except Exception as e:
-            logger.error(
-                "Text embedding failed", error=str(e), text_length=len(text)
-            )
+            logger.error("Text embedding failed", error=str(e), text_length=len(text))
             raise EmbeddingException(f"Text embedding failed: {e}")
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -119,8 +113,7 @@ class GithubEmbeddings(EmbeddingInterface):
                 # Sort by index to maintain order and extract embeddings
                 sorted_data = sorted(response.data, key=lambda x: x.index)
                 batch_embeddings = [
-                    self._extract_embedding(item.embedding)
-                    for item in sorted_data
+                    self._extract_embedding(item.embedding) for item in sorted_data
                 ]
                 all_embeddings.extend(batch_embeddings)
 
@@ -138,9 +131,7 @@ class GithubEmbeddings(EmbeddingInterface):
                 "Documents embedded successfully",
                 total_documents=len(texts),
                 total_batches=(len(texts) + batch_size - 1) // batch_size,
-                embedding_dimension=len(all_embeddings[0])
-                if all_embeddings
-                else 0,
+                embedding_dimension=len(all_embeddings[0]) if all_embeddings else 0,
             )
 
             return all_embeddings
