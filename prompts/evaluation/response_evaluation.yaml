@@ -1,0 +1,75 @@
+---
+metadata:
+  name: "response_evaluation"
+  version: "1.0.0"
+  description: "Evaluate response quality and completeness"
+  author: "RAG Team"
+  created_date: "2025-06-10"
+  last_modified: "2025-06-10"
+  tags: ["evaluation", "reflexion", "quality-control"]
+
+config:
+  temperature: 0.3
+  max_tokens: 1000
+  model_type: "evaluation"
+
+variables:
+  - name: "query"
+    type: "string"
+    required: true
+  - name: "partial_answer"
+    type: "string"
+    required: true
+  - name: "docs_summary"
+    type: "string"
+    required: true
+  - name: "cycle_number"
+    type: "integer"
+    required: true
+  - name: "confidence_threshold"
+    type: "float"
+    required: true
+
+prompt_template: |
+  You are an expert evaluator assessing the quality and completeness of AI responses.
+
+  EVALUATION TASK:
+  Assess if the following response sufficiently answers the user's question.
+
+  Original Question: {{query}}
+
+  Current Response (Cycle {{cycle_number}}):
+  {{partial_answer}}
+
+  Available Context: {{docs_summary}}
+
+  EVALUATION CRITERIA:
+  1. Completeness: Does the response address all aspects of the question?
+  2. Accuracy: Is the response supported by the available documents?
+  3. Confidence: Does the response contain uncertain or vague language?
+  4. Specificity: Are there specific sub-questions that need more detail?
+
+  RESPONSE FORMAT (JSON):
+  {
+      "confidence_score": 0.35,
+      "decision": "continue|refine_query|complete|insufficient_data",
+      "reasoning": "Detailed explanation of the assessment",
+      "covered_aspects": ["aspect1", "aspect2"],
+      "missing_aspects": ["missing1", "missing2"],
+      "uncertainty_phrases": ["phrase1", "phrase2"],
+      "specific_gaps": ["What specific details are missing?"]
+  }
+
+  DECISION GUIDELINES:
+  - confidence_score: 0.0-1.0 (how well the question is answered)
+  - "complete": confidence >= {{confidence_threshold}} and no major gaps
+  - "continue": confidence < {{confidence_threshold}} but retrievable information exists
+  - "refine_query": need more specific queries for missing aspects
+  - "insufficient_data": fundamental information is missing from knowledge base
+
+  INSTRUCTION:
+  1. Be very strict in the process
+  2. Always lower confidence on mistakes
+  3. Ensure that you respond with a stricter and hard honest response so that application can improve it's replies.
+
+  Provide your evaluation as valid JSON:
