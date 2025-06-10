@@ -578,32 +578,51 @@ class ReflexionRAGEngine:
     def _create_generation_prompt(
         self, query: str, context: str, cycle_number: int
     ) -> str:
-        """Create prompt for answer generation"""
+        """Create enhanced prompt for answer generation with citation requirements"""
 
         cycle_instruction = ""
         if cycle_number == 1:
-            cycle_instruction = "This is the initial response. Provide a comprehensive answer based on the available context."
+            cycle_instruction = "This is the initial response. Provide a comprehensive answer with proper source citations."
         else:
-            cycle_instruction = f"This is cycle {cycle_number} of a reflexion loop. Focus on addressing specific aspects that may have been missed in previous attempts."
+            cycle_instruction = f"This is cycle {cycle_number} of a reflexion loop. Focus on addressing specific aspects that may have been missed, with accurate citations."
 
-        return f"""You are an expert AI assistant providing detailed, accurate answers based on retrieved context.
+        return f"""You are an expert AI assistant providing detailed, accurate answers with proper source citations.
 
-{cycle_instruction}
+    {cycle_instruction}
 
-Question: {query}
+    Question: {query}
 
-Context from Knowledge Base:
-{context}
+    Available Documents:
+    {context}
 
-Instructions:
-- Provide a comprehensive, well-structured answer
-- Base your response on the provided context
-- Be specific and detailed where possible
-- If information is incomplete, clearly state what's missing
-- Use clear, professional language
-- Organize information logically
+    IMPORTANT: Multiple document entries may be from the SAME SOURCE FILE but different sections/chunks. When citing:
+    - If multiple "Doc X" entries share the same filename, they are from the SAME document
+    - Use the source filename as the primary citation reference
+    - You can reference specific sections if needed, but treat same-named files as one source
 
-Answer:"""
+    CITATION REQUIREMENTS:
+    - Use [Source: filename] format for inline citations (e.g., [Source: batman.md], [Source: interstellar.md])
+    - When multiple chunks are from the same file, cite the filename once, not each chunk separately
+    - Include creation dates when referencing information
+    - At the end of your response, provide a "Sources" section with unique filenames only
+    - If information comes from multiple sections of the same document, mention "multiple sections"
+    - Be specific about which source file supports each claim
+
+    RESPONSE STRUCTURE:
+    1. Provide a comprehensive answer with inline citations using source filenames
+    2. Use clear, professional language
+    3. Organize information logically with headers if needed
+    4. Include a "Sources" section at the end with unique source files only
+
+    IMPORTANT GUIDELINES:
+    - Base your response ONLY on the provided documents
+    - Use inline citations [Source: filename] after each factual claim
+    - Treat multiple chunks from the same file as ONE source document
+    - If information is incomplete, clearly state what's missing and from which sources
+    - Maintain professional tone throughout
+    - In Sources section, list each unique filename only once with its full path
+
+    Answer:"""
 
     def _create_synthesis_prompt(
         self,
@@ -612,7 +631,7 @@ Answer:"""
         all_docs: List[Document],
         cycles: List[ReflexionCycle],
     ) -> str:
-        """Create prompt for final answer synthesis"""
+        """Create enhanced synthesis prompt with citation requirements and document deduplication"""
 
         # Combine all partial answers
         answers_text = "\n\n".join(
@@ -621,6 +640,34 @@ Answer:"""
                 for i, answer in enumerate(partial_answers)
             ]
         )
+
+        # Create deduplicated document reference
+        unique_sources = {}
+        for i, doc in enumerate(all_docs, 1):
+            metadata = doc.metadata
+            file_name = metadata.get("file_name", "Unknown")
+            creation_date = metadata.get("creation_date", "Unknown")
+            source = metadata.get("source", "Unknown")
+
+            # Use filename as key for deduplication
+            if file_name not in unique_sources:
+                unique_sources[file_name] = {
+                    "creation_date": creation_date,
+                    "source": source,
+                    "doc_numbers": [i],
+                }
+            else:
+                unique_sources[file_name]["doc_numbers"].append(i)
+
+        # Build references text with deduplication info
+        doc_references = []
+        for file_name, info in unique_sources.items():
+            doc_nums = ", ".join([f"Doc {num}" for num in info["doc_numbers"]])
+            doc_references.append(
+                f"Source: {file_name} (Created: {info['creation_date']}) - {info['source']} [Appears as: {doc_nums}]"
+            )
+
+        references_text = "\n".join(doc_references)
 
         # Get evaluation insights
         evaluation_insights = []
@@ -632,44 +679,64 @@ Answer:"""
 
         insights_text = "\n".join(evaluation_insights)
 
-        return f"""You are an expert analyst tasked with creating a comprehensive final answer by synthesizing multiple research cycles.
+        return f"""
+            You are an expert analyst creating a comprehensive final answer with proper citations.
 
-Original Question: {question}
+            Original Question: {question}
 
-Research Cycles and Answers:
-{answers_text}
+            Research Cycles and Answers:
+            {answers_text}
 
-Evaluation Insights:
-{insights_text}
+            Document References (Deduplicated by Source File):
+            {references_text}
 
-Total Documents Analyzed: {len(all_docs)}
+            Evaluation Insights:
+            {insights_text}
 
-Instructions:
-- Synthesize all partial answers into one comprehensive response
-- Resolve any contradictions by explaining different perspectives
-- Highlight the most confident and well-supported information
-- Organize the final answer logically with clear structure
-- Include relevant details from all cycles
-- Acknowledge any remaining uncertainties
-- Provide a complete, authoritative answer to the original question
+            IMPORTANT: The document references above show that multiple "Doc X" entries may be from the SAME SOURCE FILE. When creating your final answer:
+            - Cite by source filename, not by individual document numbers
+            - Multiple Doc numbers from the same file represent different sections/chunks of the same document
+            - Treat same-named files as ONE source in your citations
 
-Final Comprehensive Answer:"""
+            FINAL SYNTHESIS REQUIREMENTS:
+            - Create ONE comprehensive, well-structured answer
+            - Use inline citations [Source: filename] throughout the response
+            - Do NOT use [Doc X] format - use source filenames instead
+            - Resolve contradictions by explaining different perspectives with citations
+            - Highlight the most confident and well-supported information
+            - Include a "Sources" section at the end with unique source files only
+            - Use professional formatting with clear headers and structure
+
+            CITATION FORMAT:
+            - Inline: [Source: filename] after each claim
+            - Sources section: "filename.ext (Created: date) - Full path"
+
+            STRUCTURE YOUR RESPONSE:
+            1. Executive Summary (if applicable)
+            2. Main Content with inline citations using source filenames
+            3. Key Findings/Conclusions
+            4. Sources (unique files only)
+
+            Provide a complete, authoritative answer with proper source-based citations:
+    """
 
     def _create_simple_prompt(self, question: str, context: str) -> str:
         """Create simple RAG prompt (fallback)"""
-        return f"""You are an AI assistant that answers questions based on provided context.
+        return f"""
+                You are an AI assistant that answers questions based on provided context.
 
-Question: {question}
+                Question: {question}
 
-Context:
-{context}
+                Context:
+                {context}
 
-Instructions:
-- Answer based on the provided context
-- Be comprehensive and accurate
-- If context is insufficient, state what information is missing
+                Instructions:
+                - Answer based on the provided context
+                - Be comprehensive and accurate
+                - If context is insufficient, state what information is missing
 
-Answer:"""
+                Answer:
+        """
 
     def _create_insufficient_data_response(
         self, question: str, partial_answers: List[str]
@@ -678,37 +745,54 @@ Answer:"""
 
         if partial_answers:
             combined = "\n\n".join(partial_answers)
-            return f"""Based on the available information in the knowledge base, I can provide the following partial answer:
+            return f"""
+                Based on the available information in the knowledge base, I can provide the following partial answer:
 
-{combined}
+                {combined}
 
-However, the knowledge base appears to have insufficient information to fully answer your question: "{question}"
+                However, the knowledge base appears to have insufficient information to fully answer your question: "{question}"
 
-To get a complete answer, you may need to:
-- Add more relevant documents to the knowledge base
-- Consult additional sources
-- Rephrase your question to focus on available information"""
+                To get a complete answer, you may need to:
+                - Add more relevant documents to the knowledge base
+                - Consult additional sources
+                - Rephrase your question to focus on available information
+                """
 
-        return f"""I apologize, but the knowledge base does not contain sufficient information to answer your question: "{question}"
+        return f"""
+                    I apologize, but the knowledge base does not contain sufficient information to answer your question: "{question}"
 
-Please consider:
-- Adding relevant documents to the knowledge base
-- Checking if your question relates to the available content
-- Rephrasing your question to match available information"""
+                    Please consider:
+                    - Adding relevant documents to the knowledge base
+                    - Checking if your question relates to the available content
+                    - Rephrasing your question to match available information
+                """
 
     def _prepare_context(self, documents: List[Document]) -> str:
-        """Prepare context from retrieved documents"""
+        """Prepare enhanced context from retrieved documents with rich metadata"""
         if not documents:
             return "No relevant documents found."
 
         context_parts = []
         for i, doc in enumerate(documents, 1):
-            source = doc.metadata.get("source", "Unknown")
-            similarity = doc.metadata.get("similarity_score", 0)
-            context_parts.append(
-                f"Source {i} (similarity: {similarity:.3f}) - {source}:\n{doc.content}\n"
-            )
-        return "\n".join(context_parts)
+            # Extract comprehensive metadata
+            metadata = doc.metadata
+            source = metadata.get("source", "Unknown")
+            file_name = metadata.get("file_name", "Unknown")
+            file_type = metadata.get("file_type", "Unknown")
+            creation_date = metadata.get("creation_date", "Unknown")
+            last_modified = metadata.get("last_modified_date", "Unknown")
+            similarity = metadata.get("similarity_score", 0)
+
+            # Create rich document header
+            doc_header = f"""Document {i} [Similarity: {similarity:.3f}]
+            ├─ File: {file_name} ({file_type})
+            ├─ Created: {creation_date} | Modified: {last_modified}
+            ├─ Location: {source}
+            """
+
+            context_parts.append(f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}")
+
+        return "\n\n".join(context_parts)
 
     def get_memory_stats(self) -> Dict:
         """Get memory cache statistics
