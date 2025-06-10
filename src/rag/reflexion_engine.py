@@ -3,6 +3,8 @@ import time
 from datetime import datetime
 from typing import AsyncIterator, Dict, List, Optional
 
+from prompts.manager import prompt_manager
+
 from ..config.settings import settings
 from ..core.interfaces import (
     Document,
@@ -159,6 +161,14 @@ class ReflexionRAGEngine:
                                     "reflexion_mode": True,
                                 },
                             )
+                    yield StreamingChunk(
+                        content="\n",  # Add newline buffer
+                        metadata={
+                            "cycle_number": cycle_number,
+                            "is_spacing": True,
+                            "reflexion_mode": True,
+                        },
+                    )
                 except Exception as e:
                     logger.error("Generation error", error=str(e), cycle=cycle_number)
                     partial_answer_chunks = ["Error generating response."]
@@ -578,51 +588,24 @@ class ReflexionRAGEngine:
     def _create_generation_prompt(
         self, query: str, context: str, cycle_number: int
     ) -> str:
-        """Create enhanced prompt for answer generation with citation requirements"""
+        """Create enhanced prompt for answer generation using prompt manager"""
 
-        cycle_instruction = ""
         if cycle_number == 1:
-            cycle_instruction = "This is the initial response. Provide a comprehensive answer with proper source citations."
+            prompt_name = "initial_generation"
         else:
-            cycle_instruction = f"This is cycle {cycle_number} of a reflexion loop. Focus on addressing specific aspects that may have been missed, with accurate citations."
+            prompt_name = "reflexion_generation"
 
-        return f"""You are an expert AI assistant providing detailed, accurate answers with proper source citations.
-
-    {cycle_instruction}
-
-    Question: {query}
-
-    Available Documents:
-    {context}
-
-    IMPORTANT: Multiple document entries may be from the SAME SOURCE FILE but different sections/chunks. When citing:
-    - If multiple "Doc X" entries share the same filename, they are from the SAME document
-    - Use the source filename as the primary citation reference
-    - You can reference specific sections if needed, but treat same-named files as one source
-
-    CITATION REQUIREMENTS:
-    - Use [Source: filename] format for inline citations (e.g., [Source: batman.md], [Source: interstellar.md])
-    - When multiple chunks are from the same file, cite the filename once, not each chunk separately
-    - Include creation dates when referencing information
-    - At the end of your response, provide a "Sources" section with unique filenames only
-    - If information comes from multiple sections of the same document, mention "multiple sections"
-    - Be specific about which source file supports each claim
-
-    RESPONSE STRUCTURE:
-    1. Provide a comprehensive answer with inline citations using source filenames
-    2. Use clear, professional language
-    3. Organize information logically with headers if needed
-    4. Include a "Sources" section at the end with unique source files only
-
-    IMPORTANT GUIDELINES:
-    - Base your response ONLY on the provided documents
-    - Use inline citations [Source: filename] after each factual claim
-    - Treat multiple chunks from the same file as ONE source document
-    - If information is incomplete, clearly state what's missing and from which sources
-    - Maintain professional tone throughout
-    - In Sources section, list each unique filename only once with its full path
-
-    Answer:"""
+        try:
+            return prompt_manager.render_prompt(
+                prompt_name,
+                query=query,
+                context=context,
+                cycle_number=cycle_number,
+            )
+        except Exception as e:
+            logger.error(f"Failed to render prompt {prompt_name}: {e}")
+            # Fallback to simple prompt
+            return self._create_simple_prompt(query, context)
 
     def _create_synthesis_prompt(
         self,
@@ -631,9 +614,9 @@ class ReflexionRAGEngine:
         all_docs: List[Document],
         cycles: List[ReflexionCycle],
     ) -> str:
-        """Create enhanced synthesis prompt with citation requirements and document deduplication"""
+        """Create synthesis prompt using prompt manager"""
 
-        # Combine all partial answers
+        # Prepare data as before
         answers_text = "\n\n".join(
             [
                 f"Cycle {i + 1} Answer:\n{answer}"
@@ -649,7 +632,6 @@ class ReflexionRAGEngine:
             creation_date = metadata.get("creation_date", "Unknown")
             source = metadata.get("source", "Unknown")
 
-            # Use filename as key for deduplication
             if file_name not in unique_sources:
                 unique_sources[file_name] = {
                     "creation_date": creation_date,
@@ -659,7 +641,6 @@ class ReflexionRAGEngine:
             else:
                 unique_sources[file_name]["doc_numbers"].append(i)
 
-        # Build references text with deduplication info
         doc_references = []
         for file_name, info in unique_sources.items():
             doc_nums = ", ".join([f"Doc {num}" for num in info["doc_numbers"]])
@@ -679,64 +660,29 @@ class ReflexionRAGEngine:
 
         insights_text = "\n".join(evaluation_insights)
 
-        return f"""
-            You are an expert analyst creating a comprehensive final answer with proper citations.
-
-            Original Question: {question}
-
-            Research Cycles and Answers:
-            {answers_text}
-
-            Document References (Deduplicated by Source File):
-            {references_text}
-
-            Evaluation Insights:
-            {insights_text}
-
-            IMPORTANT: The document references above show that multiple "Doc X" entries may be from the SAME SOURCE FILE. When creating your final answer:
-            - Cite by source filename, not by individual document numbers
-            - Multiple Doc numbers from the same file represent different sections/chunks of the same document
-            - Treat same-named files as ONE source in your citations
-
-            FINAL SYNTHESIS REQUIREMENTS:
-            - Create ONE comprehensive, well-structured answer
-            - Use inline citations [Source: filename] throughout the response
-            - Do NOT use [Doc X] format - use source filenames instead
-            - Resolve contradictions by explaining different perspectives with citations
-            - Highlight the most confident and well-supported information
-            - Include a "Sources" section at the end with unique source files only
-            - Use professional formatting with clear headers and structure
-
-            CITATION FORMAT:
-            - Inline: [Source: filename] after each claim
-            - Sources section: "filename.ext (Created: date) - Full path"
-
-            STRUCTURE YOUR RESPONSE:
-            1. Executive Summary (if applicable)
-            2. Main Content with inline citations using source filenames
-            3. Key Findings/Conclusions
-            4. Sources (unique files only)
-
-            Provide a complete, authoritative answer with proper source-based citations:
-    """
+        try:
+            return prompt_manager.render_prompt(
+                "final_synthesis",
+                question=question,
+                answers_text=answers_text,
+                references_text=references_text,
+                insights_text=insights_text,
+            )
+        except Exception as e:
+            logger.error(f"Failed to render synthesis prompt: {e}")
+            # Fallback to hardcoded prompt
+            return f"Synthesize the following answers for question: {question}\n\n{answers_text}"
 
     def _create_simple_prompt(self, question: str, context: str) -> str:
-        """Create simple RAG prompt (fallback)"""
-        return f"""
-                You are an AI assistant that answers questions based on provided context.
-
-                Question: {question}
-
-                Context:
-                {context}
-
-                Instructions:
-                - Answer based on the provided context
-                - Be comprehensive and accurate
-                - If context is insufficient, state what information is missing
-
-                Answer:
-        """
+        """Create simple RAG prompt using prompt manager"""
+        try:
+            return prompt_manager.render_prompt(
+                "simple_generation", question=question, context=context
+            )
+        except Exception as e:
+            logger.error(f"Failed to render simple prompt: {e}")
+            # Ultimate fallback
+            return f"Answer this question based on the context:\n\nQuestion: {question}\n\nContext:\n{context}\n\nAnswer:"
 
     def _create_insufficient_data_response(
         self, question: str, partial_answers: List[str]

@@ -96,6 +96,15 @@ class PromptManager:
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
+        # Handle empty or invalid YAML files
+        if data is None:
+            logger.warning(f"Empty or invalid YAML file: {file_path}")
+            return
+
+        if not isinstance(data, dict):
+            logger.warning(f"Invalid YAML structure in file: {file_path}")
+            return
+
         # Parse metadata
         metadata_data = data.get("metadata", {})
         metadata = PromptMetadata(
@@ -127,13 +136,21 @@ class PromptManager:
             )
             for var in variables_data
         ]
+
+        # Validate prompt template exists
+        prompt_template_content = data.get("prompt_template", "")
+        if not prompt_template_content.strip():
+            logger.warning(f"Empty prompt template in file: {file_path}")
+            return
+
         # Create prompt template
         prompt_template = PromptTemplate(
             metadata=metadata,
             config=config,
             variables=variables,
-            prompt_template=data.get("prompt_template", ""),
+            prompt_template=prompt_template_content,
         )
+
         # Cache the prompt
         self._prompt_cache[metadata.name] = prompt_template
         logger.debug(f"Loaded prompt template: {metadata.name}")

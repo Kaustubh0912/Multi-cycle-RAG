@@ -1,0 +1,20 @@
+---
+metadata:
+  name: "base_template"
+  version: "1.0.0"
+  description: "Base template for prompt inheritance"
+  author: "RAG Team"
+  created_date: "2025-06-10"
+  last_modified: "2025-06-10"
+  tags: ["template", "base"]
+
+config:
+  temperature: 0.7
+  max_tokens: 2000
+  model_type: "generation"
+
+variables: []
+
+prompt_template: |
+  # Base Template
+  This is a base template for prompt inheritance.

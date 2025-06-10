@@ -1,0 +1,50 @@
+---
+metadata:
+  name: "follow_up_generation"
+  version: "1.0.0"
+  description: "Generate follow-up queries for reflexion cycles"
+  author: "RAG Team"
+  created_date: "2025-06-10"
+  last_modified: "2025-06-10"
+  tags: ["evaluation", "follow-up", "query-generation"]
+
+config:
+  temperature: 0.5
+  max_tokens: 500
+  model_type: "evaluation"
+
+variables:
+  - name: "original_query"
+    type: "string"
+    required: true
+    description: "Original user question"
+  - name: "partial_answer"
+    type: "string"
+    required: true
+    description: "Current partial answer"
+  - name: "missing_aspects"
+    type: "array"
+    required: true
+    description: "List of missing aspects to address"
+
+prompt_template: |
+  Generate 1-2 specific follow-up queries to address missing information.
+
+  Original Question: {{original_query}}
+
+  Current Answer: {{partial_answer}}
+
+  Missing Aspects: {{missing_aspects}}
+
+  Requirements:
+  - Create specific, searchable queries
+  - Focus on the most important missing information
+  - Make queries standalone (no pronouns)
+  - Prioritize factual, retrievable information
+  - Keep queries concise and focused
+
+  Format as numbered list:
+  1. [First follow-up query]
+  2. [Second follow-up query]
+
+  Follow-up queries:

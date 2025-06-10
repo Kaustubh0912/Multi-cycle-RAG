@@ -3,6 +3,8 @@ import re
 import time
 from typing import List, Optional
 
+from prompts.manager import prompt_manager
+
 from ..config.settings import settings
 from ..core.interfaces import (
     Document,
@@ -12,6 +14,7 @@ from ..core.interfaces import (
     ReflexionEvaluatorInterface,
 )
 from ..llm.github_llm import GitHubLLM
+from ..utils.logging import logger
 
 
 class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
@@ -131,7 +134,7 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
         retrieved_docs: List[Document],
         cycle_number: int,
     ) -> str:
-        """Create evaluation prompt for confidence assessment"""
+        """Create evaluation prompt using prompt manager"""
 
         docs_summary = f"Retrieved {len(retrieved_docs)} documents from knowledge base."
         if retrieved_docs:
@@ -143,47 +146,19 @@ class SmartReflexionEvaluator(ReflexionEvaluatorInterface):
             )
             docs_summary += f"\n\nDocument previews:\n{docs_preview}"
 
-        return f"""You are an expert evaluator assessing the quality and completeness of AI responses.
-
-                EVALUATION TASK:
-                Assess if the following response sufficiently answers the user's question.
-
-                Original Question: {query}
-
-                Current Response (Cycle {cycle_number}):
-                {partial_answer}
-
-                Available Context: {docs_summary}
-
-                EVALUATION CRITERIA:
-                1. Completeness: Does the response address all aspects of the question?
-                2. Accuracy: Is the response supported by the available documents?
-                3. Confidence: Does the response contain uncertain or vague language?
-                4. Specificity: Are there specific sub-questions that need more detail?
-
-                RESPONSE FORMAT (JSON):
-                {{
-                    "confidence_score": 0.35,
-                    "decision": "continue|refine_query|complete|insufficient_data",
-                    "reasoning": "Detailed explanation of the assessment",
-                    "covered_aspects": ["aspect1", "aspect2"],
-                    "missing_aspects": ["missing1", "missing2"],
-                    "uncertainty_phrases": ["phrase1", "phrase2"],
-                    "specific_gaps": ["What specific details are missing?"]
-                }}
-
-                DECISION GUIDELINES:
-                - confidence_score: 0.0-1.0 (how well the question is answered)
-                - "complete": confidence >= {settings.confidence_threshold} and no major gaps
-                - "continue": confidence < {settings.confidence_threshold} but retrievable information exists
-                - "refine_query": need more specific queries for missing aspects
-                - "insufficient_data": fundamental information is missing from knowledge base
-
-                INSTRUCTION:
-                1. Be very strict in the process
-                2. Always lower confidence on mistakes
-                3. Ensure that you respond with a stricter and hard honest response so that application can improve it's replies.
-                Provide your evaluation as valid JSON:"""
+        try:
+            return prompt_manager.render_prompt(
+                "response_evaluation",
+                query=query,
+                partial_answer=partial_answer,
+                docs_summary=docs_summary,
+                cycle_number=cycle_number,
+                confidence_threshold=settings.confidence_threshold,
+            )
+        except Exception as e:
+            logger.error(f"Failed to render evaluation prompt: {e}")
+            # Fallback to simple evaluation
+            return f"Evaluate if this answer sufficiently addresses the question:\n\nQuestion: {query}\n\nAnswer: {partial_answer}\n\nProvide a confidence score (0-1):"
 
     def _create_follow_up_prompt(
         self,
