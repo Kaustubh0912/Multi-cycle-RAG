@@ -1,4 +1,3 @@
-# rag/rag.py
 import asyncio
 from pathlib import Path
 
@@ -136,11 +135,15 @@ class InteractiveRAGChat:
             "⏱️  Processing time:",
             f"{metadata.get('total_processing_time', 0):.2f}s",
         )
-        table.add_row("📚 Documents analyzed:", str(metadata.get("total_documents", 0)))
+        table.add_row(
+            "📚 Documents analyzed:", str(metadata.get("total_documents", 0))
+        )
         table.add_row(
             "🎯 Final confidence:", f"{metadata.get('final_confidence', 0):.2f}"
         )
-        table.add_row("💾 Memory cached:", str(metadata.get("memory_cached", False)))
+        table.add_row(
+            "💾 Memory cached:", str(metadata.get("memory_cached", False))
+        )
 
         console.print(table)
 
@@ -182,14 +185,18 @@ class InteractiveRAGChat:
         """Show current engine configuration and status"""
         engine_info = self.rag.get_engine_info()
 
-        console.print("\n[bold cyan]🔧 Reflexion Engine Configuration[/bold cyan]")
+        console.print(
+            "\n[bold cyan]🔧 Reflexion Engine Configuration[/bold cyan]"
+        )
 
         # Main configuration
         config_table = Table(show_header=False)
         config_table.add_column("Setting", style="dim")
         config_table.add_column("Value", style="bold")
 
-        config_table.add_row("Engine Type", engine_info.get("engine_type", "Unknown"))
+        config_table.add_row(
+            "Engine Type", engine_info.get("engine_type", "Unknown")
+        )
         config_table.add_row("Engine Mode", "Reflexion Loop")
         config_table.add_row(
             "Max Reflexion Cycles",
@@ -210,7 +217,9 @@ class InteractiveRAGChat:
         if engine_info.get("memory_stats"):
             memory_stats = engine_info["memory_stats"]
             if not memory_stats.get("cache_disabled"):
-                console.print("\n[bold cyan]💾 Memory Cache Statistics[/bold cyan]")
+                console.print(
+                    "\n[bold cyan]💾 Memory Cache Statistics[/bold cyan]"
+                )
                 memory_table = Table(show_header=False)
                 memory_table.add_column("Metric", style="dim")
                 memory_table.add_column("Value", style="bold")
@@ -233,7 +242,9 @@ class InteractiveRAGChat:
     async def clear_cache(self):
         """Clear memory cache if available"""
         await self.rag.clear_memory_cache()
-        console.print("[bold green]✅ Memory cache cleared successfully.[/bold green]")
+        console.print(
+            "[bold green]✅ Memory cache cleared successfully.[/bold green]"
+        )
 
     async def delete_all_documents(self):
         """Delete all documents from the vector store"""
@@ -241,7 +252,9 @@ class InteractiveRAGChat:
         current_count = await self.get_document_count()
 
         if current_count == 0:
-            console.print("[yellow]⚠️  No documents found in vector store.[/yellow]")
+            console.print(
+                "[yellow]⚠️  No documents found in vector store.[/yellow]"
+            )
             return
 
         console.print(
@@ -267,10 +280,14 @@ class InteractiveRAGChat:
                     "[bold green]✅ All documents deleted successfully![/bold green]"
                 )
             else:
-                console.print("[bold red]❌ Failed to delete documents.[/bold red]")
+                console.print(
+                    "[bold red]❌ Failed to delete documents.[/bold red]"
+                )
 
         except Exception as e:
-            console.print(f"[bold red]❌ Error deleting documents: {e}[/bold red]")
+            console.print(
+                f"[bold red]❌ Error deleting documents: {e}[/bold red]"
+            )
 
     async def interactive_menu(self):
         """Show interactive menu for additional options"""
@@ -303,7 +320,9 @@ class InteractiveRAGChat:
 @app.command()
 def chat(
     docs_path: str = typer.Option("./docs", help="Path to documents directory"),
-    ingest: bool = typer.Option(False, help="Ingest documents before starting chat"),
+    ingest: bool = typer.Option(
+        False, help="Ingest documents before starting chat"
+    ),
     force_ingest: bool = typer.Option(
         False, help="Force re-ingestion even if documents exist"
     ),
@@ -326,7 +345,9 @@ def chat(
 
         if force_ingest or ingest or doc_count == 0:
             if doc_count == 0:
-                console.print("[yellow]⚠️  No documents found in vector store.[/yellow]")
+                console.print(
+                    "[yellow]⚠️  No documents found in vector store.[/yellow]"
+                )
             else:
                 console.print(
                     f"[yellow]📚 Current documents in store: {doc_count}[/yellow]"
@@ -355,7 +376,9 @@ def chat(
 
         while True:
             try:
-                question = Prompt.ask("\n[bold blue]❓ Your question[/bold blue]")
+                question = Prompt.ask(
+                    "\n[bold blue]❓ Your question[/bold blue]"
+                )
 
                 if question.strip().lower() in ["exit", "quit", "q"]:
                     console.print("[bold red]👋 Goodbye![/bold red]")
@@ -367,7 +390,9 @@ def chat(
                     await chat.show_engine_status()
                     continue
                 elif not question.strip():
-                    console.print("[yellow]⚠️  Please enter a question.[/yellow]")
+                    console.print(
+                        "[yellow]⚠️  Please enter a question.[/yellow]"
+                    )
                     continue
 
                 await chat.process_query_with_thinking(question)
@@ -431,13 +456,23 @@ def config():
     config_table.add_column("Value", style="green")
 
     # Reflexion settings
-    config_table.add_row("Max Reflexion Cycles", str(settings.max_reflexion_cycles))
-    config_table.add_row("Confidence Threshold", str(settings.confidence_threshold))
-    config_table.add_row("Initial Retrieval K", str(settings.initial_retrieval_k))
-    config_table.add_row("Reflexion Retrieval K", str(settings.reflexion_retrieval_k))
+    config_table.add_row(
+        "Max Reflexion Cycles", str(settings.max_reflexion_cycles)
+    )
+    config_table.add_row(
+        "Confidence Threshold", str(settings.confidence_threshold)
+    )
+    config_table.add_row(
+        "Initial Retrieval K", str(settings.initial_retrieval_k)
+    )
+    config_table.add_row(
+        "Reflexion Retrieval K", str(settings.reflexion_retrieval_k)
+    )
 
     # Memory settings
-    config_table.add_row("Memory Cache Enabled", str(settings.enable_memory_cache))
+    config_table.add_row(
+        "Memory Cache Enabled", str(settings.enable_memory_cache)
+    )
     config_table.add_row("Max Cache Size", str(settings.max_cache_size))
 
     # Models
