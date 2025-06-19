@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "azure-ai-inference>=1.0.0b9",
+    "crawl4ai>=0.6.3",
     "dotenv>=0.9.9",
     "llama-index>=0.12.37",
     "llama-index-core>=0.12.37",
