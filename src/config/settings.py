@@ -1,5 +1,15 @@
+from enum import Enum
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class WebSearchMode(Enum):
+    """Web search modes for controlling when web search is triggered"""
+
+    OFF = "off"
+    INITIAL_ONLY = "initial_only"
+    EVERY_CYCLE = "every_cycle"
 
 
 class Settings(BaseSettings):
@@ -48,12 +58,29 @@ class Settings(BaseSettings):
 
     # Embedding
     embedding_model: str = Field(default="text-embedding-3-large")
-    embedding_endpoint: str = Field(default="https://models.inference.ai.azure.com")
+    embedding_endpoint: str = Field(
+        default="https://models.inference.ai.azure.com"
+    )
     embedding_batch_size: int = Field(default=100)
 
     # Document processing
     chunk_size: int = Field(default=1000)
     chunk_overlap: int = Field(default=200)
+
+    # Web Search Configuration
+    web_search_mode: WebSearchMode = Field(default=WebSearchMode.OFF)
+    web_search_results_count: int = Field(default=5)
+    web_search_timeout: int = Field(default=30)
+    web_search_min_content_length: int = Field(default=200)
+    web_search_max_title_length: int = Field(default=80)
+
+    # Google Search API
+    google_api_key: str = Field(default="")
+    google_cse_id: str = Field(default="")
+
+    # Web search retrieval
+    web_search_retrieval_k: int = Field(default=3)
+    web_search_enable_content_extraction: bool = Field(default=True)
 
 
 # Global settings instance

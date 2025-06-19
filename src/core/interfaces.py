@@ -18,6 +18,16 @@ class ReflexionDecision(Enum):
         return self.value
 
 
+class WebSearchStatus(Enum):
+    """Web search operation status"""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    ERROR = "error"
+    DISABLED = "disabled"
+    LOW_QUALITY = "low_quality"
+
+
 @dataclass
 class Document:
     """Standard document format across the system"""
@@ -25,6 +35,41 @@ class Document:
     content: str
     metadata: Dict[str, Any] = field(default_factory=dict)
     doc_id: Optional[str] = None
+
+
+@dataclass
+class WebSearchResult:
+    """Web search result with extracted content"""
+
+    url: str
+    title: str
+    snippet: str
+    content: str
+    rank: int
+    status: WebSearchStatus
+    word_count: int = 0
+    extraction_strategy: Optional[str] = None
+    error_message: Optional[str] = None
+
+    def to_document(self) -> Document:
+        """Convert web search result to Document format"""
+        return Document(
+            content=self.content,
+            metadata={
+                "source": self.url,
+                "title": self.title,
+                "snippet": self.snippet,
+                "rank": self.rank,
+                "word_count": self.word_count,
+                "extraction_strategy": self.extraction_strategy,
+                "search_result": True,
+                "status": self.status.value,
+                "created_date": datetime.now().isoformat(),
+                "file_type": "web_search",
+                "file_name": f"web_search_{self.rank}_{self.title[:50]}.txt",
+            },
+            doc_id=f"web_search_{hash(self.url)}",
+        )
 
 
 @dataclass
@@ -172,6 +217,22 @@ class VectorStoreInterface(ABC):
     @abstractmethod
     async def delete_all_documents(self, confirm_string: str) -> bool:
         """Delete all documents from the vector store"""
+        pass
+
+
+class WebSearchInterface(ABC):
+    """Abstract interface for web search implementations"""
+
+    @abstractmethod
+    async def search_and_extract(
+        self, query: str, num_results: int = 5
+    ) -> List[WebSearchResult]:
+        """Search web and extract content from results"""
+        pass
+
+    @abstractmethod
+    async def is_available(self) -> bool:
+        """Check if web search service is available"""
         pass
 
 
