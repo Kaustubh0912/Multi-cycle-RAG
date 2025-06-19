@@ -10,7 +10,7 @@ import os
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 # Third-party imports
 import requests
@@ -24,6 +24,8 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
+
+# For async generator handling
 
 load_dotenv()
 # Fixed logging configuration
@@ -295,36 +297,54 @@ class SmartContentExtractor:
         config = self._get_config_for_strategy(strategy)
 
         try:
-            result = await crawler.arun(url=url, config=config)
+            # Get the result and handle type inference issues
+            crawl_result = await crawler.arun(url=url, config=config)
 
-            if result.success and result.markdown:
-                # Extract markdown content safely
-                if hasattr(result.markdown, "fit_markdown"):
-                    markdown_content = result.markdown.fit_markdown
-                elif hasattr(result.markdown, "raw_markdown"):
-                    markdown_content = result.markdown.raw_markdown
-                else:
-                    markdown_content = str(result.markdown)
+            # Cast to Any to bypass type checker issues, then validate at runtime
+            result: Any = cast(Any, crawl_result)
 
-                cleaned_content = self._clean_content(markdown_content)
+            # Robust runtime validation instead of relying on type checker
+            success = getattr(result, "success", False)
+            markdown = getattr(result, "markdown", None)
 
-                return ExtractedContent(
-                    url=url,
-                    title=self._extract_title_from_markdown(cleaned_content),
-                    content=cleaned_content,
-                    status=ContentStatus.SUCCESS,
-                    strategy=strategy,
-                )
-            else:
-                error_msg = getattr(result, "error_message", "Unknown error")
-                return ExtractedContent(
-                    url=url,
-                    title="Failed to extract",
-                    content="",
-                    status=ContentStatus.ERROR,
-                    strategy=strategy,
-                    error_message=error_msg,
-                )
+            if success and markdown:
+                # Extract markdown content safely with fallbacks
+                markdown_content = ""
+
+                if hasattr(markdown, "fit_markdown") and markdown.fit_markdown:
+                    markdown_content = str(markdown.fit_markdown)
+                elif (
+                    hasattr(markdown, "raw_markdown") and markdown.raw_markdown
+                ):
+                    markdown_content = str(markdown.raw_markdown)
+                elif markdown:
+                    markdown_content = str(markdown)
+
+                if markdown_content:
+                    cleaned_content = self._clean_content(markdown_content)
+
+                    return ExtractedContent(
+                        url=url,
+                        title=self._extract_title_from_markdown(
+                            cleaned_content
+                        ),
+                        content=cleaned_content,
+                        status=ContentStatus.SUCCESS,
+                        strategy=strategy,
+                    )
+
+            # Handle failure cases
+            error_msg = getattr(
+                result, "error_message", "Failed to extract content"
+            )
+            return ExtractedContent(
+                url=url,
+                title="Failed to extract",
+                content="",
+                status=ContentStatus.ERROR,
+                strategy=strategy,
+                error_message=error_msg,
+            )
 
         except Exception as e:
             return ExtractedContent(
@@ -333,7 +353,7 @@ class SmartContentExtractor:
                 content="",
                 status=ContentStatus.ERROR,
                 strategy=strategy,
-                error_message=str(e),
+                error_message=f"Extraction failed: {str(e)}",
             )
 
     def _get_config_for_strategy(
@@ -542,6 +562,11 @@ class ContentExtractorApp:
 
     def __init__(self) -> None:
         """Initialize the application"""
+        if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+            raise ValueError(
+                "GOOGLE_API_KEY and GOOGLE_CSE_ID must be set in environment variables"
+            )
+
         self.search_client = GoogleSearchExtractor(
             GOOGLE_API_KEY, GOOGLE_CSE_ID
         )
