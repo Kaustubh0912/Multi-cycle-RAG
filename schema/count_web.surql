@@ -1,3 +1,3 @@
 DEFINE FUNCTION OVERWRITE fn::count_web() -> int {
-	RETURN count((SELECT * FROM documents));
+	RETURN count((SELECT * FROM web_search));
 } PERMISSIONS FULL

@@ -1,4 +1,4 @@
-DEFINE FUNCTION OVERWRITE fn::delweb() -> string {
+DEFINE FUNCTION OVERWRITE fn::delweb($confirm: string) -> string {
 	LET $word = 'CONFIRM';
 	IF $confirm == $word
 		{
