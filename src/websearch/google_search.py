@@ -496,3 +496,49 @@ class GoogleWebSearch(WebSearchInterface):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
         await self.close()
+
+    def _validate_content_for_storage(self, content: str, url: str) -> bool:
+        """Validate content before storing in database"""
+        if not content or len(content.strip()) < settings.web_search_min_content_length:
+            return False
+
+        # Token limit check (rough estimate: 1 token ≈ 4 characters)
+        estimated_tokens = len(content) // 4
+        if estimated_tokens > 2000:  # Limit to 2000 tokens per document
+            return False
+
+        # Quality checks from working example
+        words = len(content.split())
+        if words < 50:  # Too short
+            return False
+
+        # Check word-to-link ratio
+        links = content.count("[")  # Markdown links
+        if words > 0 and links / words > 0.3:  # Too many links
+            return False
+
+        # Check for meaningful sentences
+        sentences = content.split(".")
+        meaningful_sentences = [s for s in sentences if len(s.strip()) > 20]
+        if len(meaningful_sentences) < 3:
+            return False
+
+        return True
+
+    def _truncate_content_for_storage(
+        self, content: str, max_tokens: int = 2000
+    ) -> str:
+        """Truncate content to fit token limits"""
+        # Rough estimate: 1 token ≈ 4 characters
+        max_chars = max_tokens * 4
+
+        if len(content) <= max_chars:
+            return content
+
+        # Truncate at sentence boundary
+        truncated = content[:max_chars]
+        last_period = truncated.rfind(".")
+        if last_period > max_chars * 0.8:  # If we can find a good break point
+            truncated = truncated[: last_period + 1]
+
+        return truncated + "\n\n[Content truncated for storage]"

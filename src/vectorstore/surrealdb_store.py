@@ -210,8 +210,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
     async def similarity_search_combined(
         self, query: str, k_docs: int = 3, k_web: int = 2
     ) -> List[Document]:
-        """Perform combined similarity search on both documents and web searches"""
-
+        """Perform combined similarity search with proper limits"""
         await self._ensure_connection()
 
         if not self.client:
@@ -221,29 +220,45 @@ class SurrealDBVectorStore(VectorStoreInterface):
             # Generate query embedding
             query_embedding = await self.embedding_function.embed_text(query)
 
-            # Search documents
+            # Search documents with limit
             docs_query = f"""
-            fn::similarity_search({query_embedding}, {k_docs});
+            SELECT id, content, metadata, vector::similarity::cosine(embedding, {query_embedding}) AS score
+            FROM documents
+            WHERE embedding <|300,COSINE|> {query_embedding}
+            ORDER BY score DESC
+            LIMIT {k_docs};
             """
 
-            # Search web results
+            # Search web results with limit
             web_query = f"""
-            fn::similarity_search_web({query_embedding}, {k_web});
+            SELECT id, content, metadata, vector::similarity::cosine(embedding, {query_embedding}) AS score
+            FROM web_search
+            WHERE embedding <|300,COSINE|> {query_embedding}
+            ORDER BY score DESC
+            LIMIT {k_web};
             """
 
             # Execute both searches
             docs_results = await self.client.query(docs_query)
             web_results = await self.client.query(web_query)
 
-            # Combine and process results
+            # Process and combine results with token limits
             all_documents = []
+            total_tokens = 0
+            max_total_tokens = 6000  # Leave room for prompt overhead
 
-            # Process document results
+            # Process document results first
             if docs_results:
                 for result in docs_results:
                     if isinstance(result, dict):
+                        content = result.get("content", "")
+                        estimated_tokens = len(content) // 4
+
+                        if total_tokens + estimated_tokens > max_total_tokens:
+                            break  # Stop adding if we'd exceed limit
+
                         doc = Document(
-                            content=result.get("content", ""),
+                            content=content,
                             metadata={
                                 **result.get("metadata", {}),
                                 "similarity_score": result.get("score", 0.0),
@@ -252,13 +267,20 @@ class SurrealDBVectorStore(VectorStoreInterface):
                             doc_id=str(result.get("id")),
                         )
                         all_documents.append(doc)
+                        total_tokens += estimated_tokens
 
-            # Process web search results
-            if web_results:
+            # Process web search results if we have token budget left
+            if web_results and total_tokens < max_total_tokens:
                 for result in web_results:
                     if isinstance(result, dict):
+                        content = result.get("content", "")
+                        estimated_tokens = len(content) // 4
+
+                        if total_tokens + estimated_tokens > max_total_tokens:
+                            break  # Stop adding if we'd exceed limit
+
                         doc = Document(
-                            content=result.get("content", ""),
+                            content=content,
                             metadata={
                                 **result.get("metadata", {}),
                                 "similarity_score": result.get("score", 0.0),
@@ -267,6 +289,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
                             doc_id=str(result.get("id")),
                         )
                         all_documents.append(doc)
+                        total_tokens += estimated_tokens
 
             # Sort by similarity score
             all_documents.sort(
@@ -275,12 +298,12 @@ class SurrealDBVectorStore(VectorStoreInterface):
             )
 
             logger.info(
-                f"Retrieved {len(all_documents)} documents and web search results from SurrealDB"
+                f"Retrieved {len(all_documents)} combined documents (estimated {total_tokens} tokens)"
             )
             return all_documents
 
         except Exception as e:
-            logger.error(f"Combined similarity search error: {str(e)}")
+            logger.error(f"Combined similarity search error: {e}")
             return []
 
     async def count_documents(self) -> int:

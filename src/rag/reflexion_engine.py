@@ -1,3 +1,4 @@
+# rag\src\rag\reflexion_engine.py
 import asyncio
 import time
 from datetime import datetime
@@ -149,44 +150,55 @@ class ReflexionRAGEngine:
                         else settings.reflexion_retrieval_k
                     )
 
-                    # Initialize variables to ensure they're always lists
-                    retrieved_docs = []
-                    web_search_results = []
-
                     if should_perform_web_search:
-                        # Parallel execution of DB search and web search
+                        # Use combined search with token limits
                         logger.info(
-                            "Performing parallel DB and web search",
+                            "Performing combined DB and web search",
                             cycle=cycle_number,
                         )
 
-                        db_task = self.vector_store.similarity_search(
-                            current_query, k=k
-                        )
-                        web_task = self._perform_web_search(current_query)
+                        # Use the combined search method with proper limits
+                        k_docs = min(k, 2)  # Limit DB docs
+                        k_web = min(
+                            settings.web_search_retrieval_k, 2
+                        )  # Limit web docs
 
-                        results = await asyncio.gather(
-                            db_task, web_task, return_exceptions=True
-                        )
-
-                        # Handle exceptions from parallel execution - CHECK FOR BaseException
-                        if isinstance(results[0], BaseException):
-                            logger.error(
-                                "Document retrieval error",
-                                error=str(results[0]),
+                        try:
+                            retrieved_docs = (
+                                await self.vector_store.similarity_search_combined(
+                                    current_query, k_docs=k_docs, k_web=k_web
+                                )
                             )
+
+                            # Separate for reporting
+                            db_docs = [
+                                d
+                                for d in retrieved_docs
+                                if d.metadata.get("source_type") == "document"
+                            ]
+                            web_docs = [
+                                d
+                                for d in retrieved_docs
+                                if d.metadata.get("source_type") == "web_search"
+                            ]
+
+                            # For web search results, we still need to perform the search for new content
+                            web_search_results = await self._perform_web_search(
+                                current_query
+                            )
+
+                            logger.info(
+                                "Combined retrieval completed",
+                                db_docs=len(db_docs),
+                                web_docs=len(web_docs),
+                                new_web_results=len(web_search_results),
+                                cycle=cycle_number,
+                            )
+
+                        except Exception as e:
+                            logger.error("Combined retrieval error", error=str(e))
                             retrieved_docs = []
-                        else:
-                            retrieved_docs = results[0] or []
-
-                        if isinstance(results[1], BaseException):
-                            logger.error(
-                                "Web search error",
-                                error=str(results[1]),
-                            )
                             web_search_results = []
-                        else:
-                            web_search_results = results[1] or []
 
                         # Store successful web search results in database
                         if web_search_results:
@@ -208,24 +220,11 @@ class ReflexionRAGEngine:
                                         f"Failed to store web search results: {e}"
                                     )
 
-                        logger.info(
-                            "Parallel retrieval completed",
-                            db_docs=len(retrieved_docs),
-                            web_results=len(web_search_results),
-                            cycle=cycle_number,
-                        )
                     else:
-                        # DB search only
-                        try:
-                            retrieved_docs = (
-                                await self.vector_store.similarity_search(
-                                    current_query, k=k
-                                )
-                            ) or []
-                        except Exception as e:
-                            logger.error("Document retrieval error", error=str(e))
-                            retrieved_docs = []
-
+                        # DB search only with token limits
+                        retrieved_docs = await self.vector_store.similarity_search(
+                            current_query, k=min(k, 3)
+                        )
                         logger.info(
                             "Retrieved documents from DB only",
                             count=len(retrieved_docs),
@@ -237,18 +236,27 @@ class ReflexionRAGEngine:
                     web_search_results = []
                     logger.warning("Proceeding with empty document set")
 
-                # Ensure variables are never None (final safety check)
-                retrieved_docs = retrieved_docs or []
-                web_search_results = web_search_results or []
-
-                # Step 3: Combine context from both sources
+                # Step 3: Combine context from both sources with token limits
                 combined_context = self._prepare_combined_context(
                     retrieved_docs, web_search_results
                 )
-
                 generation_prompt = self._create_generation_prompt(
                     current_query, combined_context, cycle_number
                 )
+
+                # Check prompt token count before generation
+                prompt_tokens = self._estimate_tokens(generation_prompt)
+                if prompt_tokens > 6000:  # Leave room for response
+                    logger.warning(
+                        f"Prompt too long ({prompt_tokens} tokens), truncating context"
+                    )
+                    # Truncate context and regenerate prompt
+                    truncated_context = self._truncate_context(
+                        combined_context, max_tokens=4000
+                    )
+                    generation_prompt = self._create_generation_prompt(
+                        current_query, truncated_context, cycle_number
+                    )
 
                 # Step 4: Generate partial answer
                 partial_answer_chunks = []
@@ -306,23 +314,27 @@ class ReflexionRAGEngine:
                     CONTINUE FROM WHERE IT STOPPED:"""
 
                     continuation_chunks = []
-                    async for chunk in self.generation_llm.generate_stream(
-                        continuation_prompt, max_tokens=settings.llm_max_tokens
-                    ):
-                        continuation_chunks.append(chunk.content)
-                        if chunk.content:
-                            yield StreamingChunk(
-                                content=chunk.content,
-                                metadata={
-                                    "cycle_number": cycle_number,
-                                    "is_partial": True,
-                                    "is_continuation": True,
-                                    "reflexion_mode": True,
-                                },
-                            )
+                    try:
+                        async for chunk in self.generation_llm.generate_stream(
+                            continuation_prompt,
+                            max_tokens=min(settings.llm_max_tokens, 1500),
+                        ):
+                            continuation_chunks.append(chunk.content)
+                            if chunk.content:
+                                yield StreamingChunk(
+                                    content=chunk.content,
+                                    metadata={
+                                        "cycle_number": cycle_number,
+                                        "is_partial": True,
+                                        "is_continuation": True,
+                                        "reflexion_mode": True,
+                                    },
+                                )
 
-                    continuation = "".join(continuation_chunks)
-                    partial_answer = partial_answer + " " + continuation
+                        continuation = "".join(continuation_chunks)
+                        partial_answer = partial_answer + " " + continuation
+                    except Exception as e:
+                        logger.error(f"Continuation failed: {e}")
 
                 logger.info(
                     "Generated answer",
@@ -511,13 +523,17 @@ class ReflexionRAGEngine:
                 COMPLETE THE RESPONSE:"""
 
                 completion_chunks = []
-                async for chunk in self.generation_llm.generate_stream(
-                    completion_prompt, max_tokens=settings.summary_max_tokens
-                ):
-                    completion_chunks.append(chunk.content)
+                try:
+                    async for chunk in self.generation_llm.generate_stream(
+                        completion_prompt,
+                        max_tokens=min(settings.summary_max_tokens, 2000),
+                    ):
+                        completion_chunks.append(chunk.content)
 
-                completion = "".join(completion_chunks)
-                final_answer = final_answer + " " + completion
+                    completion = "".join(completion_chunks)
+                    final_answer = final_answer + " " + completion
+                except Exception as e:
+                    logger.error(f"Final completion failed: {e}")
 
             # Add processing metadata
             reflexion_memory.total_processing_time = time.time() - start_time
@@ -602,12 +618,9 @@ class ReflexionRAGEngine:
 
         try:
             web_results = await self.web_search.search_and_extract(
-                query, num_results=settings.web_search_results_count
+                query,
+                num_results=min(settings.web_search_results_count, 3),  # Limit results
             )
-
-            # Ensure we always return a list
-            if web_results is None:
-                return []
 
             # Filter out failed results if needed
             successful_results = [
@@ -622,57 +635,116 @@ class ReflexionRAGEngine:
             logger.error(f"Web search failed: {e}")
             return []
 
+    def _estimate_tokens(self, text: str) -> int:
+        """Rough token estimation (1 token ≈ 4 characters)"""
+        return len(text) // 4
+
+    def _truncate_context(self, context: str, max_tokens: int = 4000) -> str:
+        """Truncate context to fit within token limits"""
+        max_chars = max_tokens * 4
+        if len(context) <= max_chars:
+            return context
+
+        # Try to truncate at document boundary
+        truncated = context[:max_chars]
+        last_separator = truncated.rfind("-" * 80)  # Document separator
+        if last_separator > max_chars * 0.7:  # If we can find a good break point
+            truncated = truncated[:last_separator]
+
+        return truncated + "\n\n[Context truncated due to token limits]"
+
     def _prepare_combined_context(
         self, db_docs: List[Document], web_results: List[WebSearchResult]
     ) -> str:
-        """Prepare combined context from DB documents and web search results"""
+        """Prepare combined context with token limits"""
         context_parts = []
+        total_tokens = 0
+        max_context_tokens = 4000  # Leave room for question and instructions
 
-        # Add database documents
+        # Add database documents first (prioritize existing knowledge)
         if db_docs:
             context_parts.append("## Knowledge Base Documents\n")
             for i, doc in enumerate(db_docs, 1):
-                metadata = doc.metadata
-                source = metadata.get("source", "Unknown")
-                file_name = metadata.get("file_name", "Unknown")
-                file_type = metadata.get("file_type", "Unknown")
-                creation_date = metadata.get("creation_date", "Unknown")
-                similarity = metadata.get("similarity_score", 0)
+                doc_content = self._format_document_for_context(doc, i)
+                doc_tokens = self._estimate_tokens(doc_content)
 
-                doc_header = f"""Document {i} [Similarity: {similarity:.3f}]
-                ├─ File: {file_name} ({file_type})
-                ├─ Created: {creation_date}
-                ├─ Location: {source}
-                """
-                context_parts.append(
-                    f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}"
-                )
+                if total_tokens + doc_tokens > max_context_tokens:
+                    context_parts.append(
+                        f"\n[Additional {len(db_docs) - i + 1} documents truncated due to length limits]"
+                    )
+                    break
 
-        # Add web search results
-        if web_results:
+                context_parts.append(doc_content)
+                total_tokens += doc_tokens
+
+        # Add web search results if we have token budget
+        if web_results and total_tokens < max_context_tokens:
             successful_web_results = [
                 r for r in web_results if r.status == WebSearchStatus.SUCCESS
             ]
             if successful_web_results:
                 context_parts.append("\n\n## Web Search Results\n")
                 for i, result in enumerate(successful_web_results, 1):
-                    web_header = f"""Web Result {i} [Rank: {result.rank}]
-                    ├─ Title: {result.title}
-                    ├─ URL: {result.url}
-                    ├─ Word Count: {result.word_count}
-                    ├─ Extraction: {result.extraction_strategy}
-                    """
-                    context_parts.append(
-                        f"{web_header}\n\nContent:\n{result.content}\n{'-' * 80}"
-                    )
+                    web_content = self._format_web_result_for_context(result, i)
+                    web_tokens = self._estimate_tokens(web_content)
 
-        return (
+                    if total_tokens + web_tokens > max_context_tokens:
+                        context_parts.append(
+                            f"\n[Additional {len(successful_web_results) - i + 1} web results truncated due to length limits]"
+                        )
+                        break
+
+                    context_parts.append(web_content)
+                    total_tokens += web_tokens
+
+        final_context = (
             "\n\n".join(context_parts)
             if context_parts
             else "No relevant documents found."
         )
+        logger.info(
+            f"Prepared context with estimated {self._estimate_tokens(final_context)} tokens"
+        )
 
-    # ... (rest of the methods remain the same as in your current implementation)
+        return final_context
+
+    def _format_document_for_context(self, doc: Document, index: int) -> str:
+        """Format document for context with length limits"""
+        metadata = doc.metadata
+        source = metadata.get("source", "Unknown")
+        file_name = metadata.get("file_name", "Unknown")
+        file_type = metadata.get("file_type", "Unknown")
+        creation_date = metadata.get("creation_date", "Unknown")
+        similarity = metadata.get("similarity_score", 0)
+
+        # Truncate content if needed
+        content = doc.content
+        if len(content) > 1500:  # Limit per document
+            content = content[:1500] + "\n[Content truncated]"
+
+        doc_header = f"""Document {index} [Similarity: {similarity:.3f}]
+        ├─ File: {file_name} ({file_type})
+        ├─ Created: {creation_date}
+        ├─ Location: {source}
+        """
+        return f"{doc_header}\n\nContent:\n{content}\n{'-' * 80}"
+
+    def _format_web_result_for_context(
+        self, result: WebSearchResult, index: int
+    ) -> str:
+        """Format web result for context with length limits"""
+        # Truncate content if needed
+        content = result.content
+        if len(content) > 1000:  # Smaller limit for web content
+            content = content[:1000] + "\n[Content truncated]"
+
+        web_header = f"""Web Result {index} [Rank: {result.rank}]
+        ├─ Title: {result.title}
+        ├─ URL: {result.url}
+        ├─ Word Count: {result.word_count}
+        ├─ Extraction: {result.extraction_strategy}
+        """
+        return f"{web_header}\n\nContent:\n{content}\n{'-' * 80}"
 
     def _is_likely_truncated(self, response: str) -> bool:
         """Check if response appears to be truncated"""
@@ -701,11 +773,20 @@ class ReflexionRAGEngine:
         logger.info("Using simple RAG mode", query=question)
 
         retrieved_docs = await self.vector_store.similarity_search(
-            question, k=settings.initial_retrieval_k
+            question, k=min(settings.initial_retrieval_k, 3)
         )
         logger.debug("Retrieved documents for simple query", count=len(retrieved_docs))
         context = self._prepare_context(retrieved_docs)
         prompt = self._create_simple_prompt(question, context)
+
+        # Check token limits for simple query too
+        prompt_tokens = self._estimate_tokens(prompt)
+        if prompt_tokens > 6000:
+            logger.warning(
+                f"Simple prompt too long ({prompt_tokens} tokens), truncating"
+            )
+            context = self._truncate_context(context, max_tokens=3000)
+            prompt = self._create_simple_prompt(question, context)
 
         async for chunk in self.generation_llm.generate_stream(prompt):
             if chunk.content:
@@ -756,6 +837,15 @@ class ReflexionRAGEngine:
         synthesis_prompt = self._create_synthesis_prompt(
             question, partial_answers, all_docs, memory.cycles, all_web_results
         )
+
+        # Check token limits for synthesis
+        prompt_tokens = self._estimate_tokens(synthesis_prompt)
+        if prompt_tokens > 6000:
+            logger.warning(
+                f"Synthesis prompt too long ({prompt_tokens} tokens), using best cycle answer"
+            )
+            best_cycle = max(memory.cycles, key=lambda c: c.evaluation.confidence_score)
+            return best_cycle.partial_answer
 
         answer_chunks = []
         async for chunk in self.summary_llm.generate_stream(synthesis_prompt):
@@ -894,26 +984,26 @@ class ReflexionRAGEngine:
                 """
 
     def _prepare_context(self, documents: List[Document]) -> str:
-        """Prepare enhanced context from retrieved documents with rich metadata"""
+        """Prepare enhanced context from retrieved documents with rich metadata and token limits"""
         if not documents:
             return "No relevant documents found."
 
         context_parts = []
-        for i, doc in enumerate(documents, 1):
-            metadata = doc.metadata
-            source = metadata.get("source", "Unknown")
-            file_name = metadata.get("file_name", "Unknown")
-            file_type = metadata.get("file_type", "Unknown")
-            creation_date = metadata.get("creation_date", "Unknown")
-            last_modified = metadata.get("last_modified_date", "Unknown")
-            similarity = metadata.get("similarity_score", 0)
+        total_tokens = 0
+        max_context_tokens = 4000
 
-            doc_header = f"""Document {i} [Similarity: {similarity:.3f}]
-            ├─ File: {file_name} ({file_type})
-            ├─ Created: {creation_date} | Modified: {last_modified}
-            ├─ Location: {source}
-            """
-            context_parts.append(f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}")
+        for i, doc in enumerate(documents, 1):
+            doc_content = self._format_document_for_context(doc, i)
+            doc_tokens = self._estimate_tokens(doc_content)
+
+            if total_tokens + doc_tokens > max_context_tokens:
+                context_parts.append(
+                    f"\n[Additional {len(documents) - i + 1} documents truncated due to length limits]"
+                )
+                break
+
+            context_parts.append(doc_content)
+            total_tokens += doc_tokens
 
         return "\n\n".join(context_parts)
 

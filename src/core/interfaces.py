@@ -52,9 +52,21 @@ class WebSearchResult:
     error_message: Optional[str] = None
 
     def to_document(self) -> Document:
-        """Convert web search result to Document format"""
+        """Convert web search result to Document format with content limits"""
+        # Truncate content if too long (max 2000 tokens ≈ 8000 chars)
+        max_content_length = 8000
+        truncated_content = self.content
+
+        if len(self.content) > max_content_length:
+            truncated_content = self.content[:max_content_length]
+            # Try to break at sentence boundary
+            last_period = truncated_content.rfind(".")
+            if last_period > max_content_length * 0.8:
+                truncated_content = truncated_content[: last_period + 1]
+            truncated_content += "\n\n[Content truncated for embedding]"
+
         return Document(
-            content=self.content,
+            content=truncated_content,
             metadata={
                 "source": self.url,
                 "title": self.title,
@@ -67,6 +79,8 @@ class WebSearchResult:
                 "created_date": datetime.now().isoformat(),
                 "file_type": "web_search",
                 "file_name": f"web_search_{self.rank}_{self.title[:50]}.txt",
+                "content_truncated": len(self.content) > max_content_length,
+                "original_length": len(self.content),
             },
             doc_id=f"web_search_{hash(self.url)}",
         )
@@ -230,12 +244,18 @@ class VectorStoreInterface(ABC):
         """Delete all documents from the vector store"""
         pass
 
-    # ADD THIS METHOD:
     @abstractmethod
     async def add_web_search_results(
         self, web_results: List[WebSearchResult]
     ) -> List[str]:
         """Add web search results to the vector store"""
+        pass
+
+    @abstractmethod
+    async def similarity_search_combined(
+        self, query: str, k_docs: int = 3, k_web: int = 2
+    ) -> List[Document]:
+        """Search both documents and web searches with separate limits"""
         pass
 
 
