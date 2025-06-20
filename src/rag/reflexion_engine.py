@@ -5,7 +5,7 @@ from typing import AsyncIterator, Dict, List, Optional
 
 from prompts.manager import prompt_manager
 
-from ..config.settings import settings
+from ..config.settings import WebSearchMode, settings
 from ..core.interfaces import (
     Document,
     LLMInterface,
@@ -16,6 +16,9 @@ from ..core.interfaces import (
     ReflexionMemory,
     StreamingChunk,
     VectorStoreInterface,
+    WebSearchInterface,
+    WebSearchResult,
+    WebSearchStatus,
 )
 from ..data.loader import DocumentLoader
 from ..data.processor import DocumentProcessor
@@ -24,10 +27,11 @@ from ..memory.cache import ReflexionMemoryCache, create_query_hash
 from ..reflexion.evaluator import SmartReflexionEvaluator
 from ..utils.logging import logger
 from ..vectorstore.surrealdb_store import SurrealDBVectorStore
+from ..websearch.google_search import GoogleWebSearch
 
 
 class ReflexionRAGEngine:
-    """Advanced RAG engine with dynamic reflexion loop architecture"""
+    """Advanced RAG engine with dynamic reflexion loop architecture and web search integration"""
 
     def __init__(
         self,
@@ -36,6 +40,7 @@ class ReflexionRAGEngine:
         summary_llm: Optional[LLMInterface] = None,
         vector_store: Optional[VectorStoreInterface] = None,
         reflexion_evaluator: Optional[ReflexionEvaluatorInterface] = None,
+        web_search: Optional[WebSearchInterface] = None,
     ):
         # Initialize different LLMs for different purposes
         self.generation_llm = generation_llm or GitHubLLM(
@@ -57,9 +62,12 @@ class ReflexionRAGEngine:
         )
 
         self.vector_store = vector_store or SurrealDBVectorStore()
-        self.reflexion_evaluator = reflexion_evaluator or SmartReflexionEvaluator(
-            self.evaluation_llm
+        self.reflexion_evaluator = (
+            reflexion_evaluator or SmartReflexionEvaluator(self.evaluation_llm)
         )
+
+        # Web search integration
+        self.web_search = web_search or GoogleWebSearch()
 
         # Memory cache for reflexion loops
         self.memory_cache = (
@@ -79,18 +87,25 @@ class ReflexionRAGEngine:
         Returns:
             Number of documents successfully ingested
         """
-        documents = await self.document_loader.load_from_directory(directory_path)
-        processed_docs = await self.document_processor.process_documents(documents)
+        documents = await self.document_loader.load_from_directory(
+            directory_path
+        )
+        processed_docs = await self.document_processor.process_documents(
+            documents
+        )
         doc_ids = await self.vector_store.add_documents(processed_docs)
         return len(doc_ids)
 
     async def query_with_reflexion_stream(
         self, question: str
     ) -> AsyncIterator[StreamingChunk]:
-        """Main reflexion loop query with streaming"""
+        """Main reflexion loop query with streaming and web search integration"""
 
-        # Always use reflexion loop (legacy fallback removed)
-        logger.info("Starting Reflexion Loop", query=question)
+        logger.info(
+            "Starting Reflexion Loop",
+            query=question,
+            web_mode=settings.web_search_mode.value,
+        )
 
         # Check memory cache first
         query_hash = create_query_hash(question)
@@ -99,8 +114,12 @@ class ReflexionRAGEngine:
             try:
                 cached_memory = self.memory_cache.get(query_hash)
                 if cached_memory:
-                    logger.info("Found cached reflexion result", query_hash=query_hash)
-                    async for chunk in self._stream_cached_result(cached_memory):
+                    logger.info(
+                        "Found cached reflexion result", query_hash=query_hash
+                    )
+                    async for chunk in self._stream_cached_result(
+                        cached_memory
+                    ):
                         yield chunk
                     return
             except Exception as e:
@@ -112,6 +131,7 @@ class ReflexionRAGEngine:
         # Initialize reflexion memory
         reflexion_memory = ReflexionMemory(original_query=question)
         start_time = time.time()
+
         try:
             # Reflexion loop
             cycle_number = 1
@@ -119,39 +139,137 @@ class ReflexionRAGEngine:
 
             while cycle_number <= settings.max_reflexion_cycles:
                 logger.info("Starting reflexion cycle", cycle=cycle_number)
-                logger.info("Processing query", query=current_query, cycle=cycle_number)
+                logger.info(
+                    "Processing query", query=current_query, cycle=cycle_number
+                )
 
                 cycle_start = time.time()
+                web_search_results = []
 
-                # Step 1: Retrieve documents
+                # Step 1: Determine if web search should be performed
+                should_perform_web_search = self._should_perform_web_search(
+                    cycle_number
+                )
+
+                # Step 2: Parallel retrieval from DB and optionally web
                 try:
                     k = (
                         settings.initial_retrieval_k
                         if cycle_number == 1
                         else settings.reflexion_retrieval_k
                     )
-                    retrieved_docs = await self.vector_store.similarity_search(
-                        current_query, k=k
-                    )
-                    logger.info("Retrieved documents", count=len(retrieved_docs))
-                except Exception as e:
-                    logger.error("Document retrieval error", error=str(e))
+
+                    # Initialize variables to ensure they're always lists
                     retrieved_docs = []
+                    web_search_results = []
+
+                    if should_perform_web_search:
+                        # Parallel execution of DB search and web search
+                        logger.info(
+                            "Performing parallel DB and web search",
+                            cycle=cycle_number,
+                        )
+
+                        db_task = self.vector_store.similarity_search(
+                            current_query, k=k
+                        )
+                        web_task = self._perform_web_search(current_query)
+
+                        results = await asyncio.gather(
+                            db_task, web_task, return_exceptions=True
+                        )
+
+                        # Handle exceptions from parallel execution - CHECK FOR BaseException
+                        if isinstance(results[0], BaseException):
+                            logger.error(
+                                "Document retrieval error",
+                                error=str(results[0]),
+                            )
+                            retrieved_docs = []
+                        else:
+                            retrieved_docs = results[0] or []
+
+                        if isinstance(results[1], BaseException):
+                            logger.error(
+                                "Web search error",
+                                error=str(results[1]),
+                            )
+                            web_search_results = []
+                        else:
+                            web_search_results = results[1] or []
+
+                        # Store successful web search results in database
+                        if web_search_results:
+                            successful_results = [
+                                r
+                                for r in web_search_results
+                                if r.status == WebSearchStatus.SUCCESS
+                            ]
+                            if successful_results:
+                                try:
+                                    await self.vector_store.add_web_search_results(
+                                        successful_results
+                                    )
+                                    logger.info(
+                                        f"Stored {len(successful_results)} web search results in database"
+                                    )
+                                except Exception as e:
+                                    logger.error(
+                                        f"Failed to store web search results: {e}"
+                                    )
+
+                        logger.info(
+                            "Parallel retrieval completed",
+                            db_docs=len(retrieved_docs),
+                            web_results=len(web_search_results),
+                            cycle=cycle_number,
+                        )
+                    else:
+                        # DB search only
+                        try:
+                            retrieved_docs = (
+                                await self.vector_store.similarity_search(
+                                    current_query, k=k
+                                )
+                            ) or []
+                        except Exception as e:
+                            logger.error(
+                                "Document retrieval error", error=str(e)
+                            )
+                            retrieved_docs = []
+
+                        logger.info(
+                            "Retrieved documents from DB only",
+                            count=len(retrieved_docs),
+                        )
+
+                except Exception as e:
+                    logger.error("Retrieval error", error=str(e))
+                    retrieved_docs = []
+                    web_search_results = []
                     logger.warning("Proceeding with empty document set")
 
-                # Step 2: Generate partial answer
-                context = self._prepare_context(retrieved_docs)
-                generation_prompt = self._create_generation_prompt(
-                    current_query, context, cycle_number
+                # Ensure variables are never None (final safety check)
+                retrieved_docs = retrieved_docs or []
+                web_search_results = web_search_results or []
+
+                # Step 3: Combine context from both sources
+                combined_context = self._prepare_combined_context(
+                    retrieved_docs, web_search_results
                 )
 
+                generation_prompt = self._create_generation_prompt(
+                    current_query, combined_context, cycle_number
+                )
+
+                # Step 4: Generate partial answer
                 partial_answer_chunks = []
                 try:
                     async for chunk in self.generation_llm.generate_stream(
                         generation_prompt
                     ):
                         partial_answer_chunks.append(chunk.content)
-                        # Stream intermediate answers as markdown blocks
+                        # Stream intermediate answers
                         if chunk.content:
                             yield StreamingChunk(
                                 content=chunk.content,
@@ -159,6 +277,10 @@ class ReflexionRAGEngine:
                                     "cycle_number": cycle_number,
                                     "is_partial": True,
                                     "reflexion_mode": True,
+                                    "web_search_enabled": should_perform_web_search,
+                                    "web_results_count": len(
+                                        web_search_results
+                                    ),
                                 },
                             )
                     yield StreamingChunk(
@@ -170,7 +292,9 @@ class ReflexionRAGEngine:
                         },
                     )
                 except Exception as e:
-                    logger.error("Generation error", error=str(e), cycle=cycle_number)
+                    logger.error(
+                        "Generation error", error=str(e), cycle=cycle_number
+                    )
                     partial_answer_chunks = ["Error generating response."]
                     yield StreamingChunk(
                         content="⚠️ Error during response generation. Attempting recovery...",
@@ -184,14 +308,12 @@ class ReflexionRAGEngine:
 
                 partial_answer = "".join(partial_answer_chunks)
 
-                # Check if response appears truncated
+                # Check if response appears truncated and handle continuation
                 if self._is_likely_truncated(partial_answer):
                     logger.warning(
                         "Response appears truncated, attempting continuation",
                         cycle=cycle_number,
                     )
-
-                    # Generate continuation
                     continuation_prompt = f"""Continue this response where it left off. Maintain the same tone and style:
 
                     PREVIOUS RESPONSE:
@@ -204,7 +326,6 @@ class ReflexionRAGEngine:
                         continuation_prompt, max_tokens=settings.llm_max_tokens
                     ):
                         continuation_chunks.append(chunk.content)
-                        # Stream continuation
                         if chunk.content:
                             yield StreamingChunk(
                                 content=chunk.content,
@@ -225,26 +346,28 @@ class ReflexionRAGEngine:
                     cycle=cycle_number,
                 )
 
-                # Step 3: Self-evaluation
+                # Step 5: Self-evaluation
                 logger.info("Evaluating response quality", cycle=cycle_number)
                 try:
-                    evaluation = await self.reflexion_evaluator.evaluate_response(
-                        question,
-                        partial_answer,
-                        retrieved_docs,
-                        cycle_number,
+                    evaluation = (
+                        await self.reflexion_evaluator.evaluate_response(
+                            question,
+                            partial_answer,
+                            retrieved_docs,
+                            cycle_number,
+                        )
                     )
-
                     logger.info(
                         "Evaluation complete",
                         confidence=f"{evaluation.confidence_score:.2f}",
                         decision=evaluation.decision.name,
                         cycle=cycle_number,
                     )
-                    logger.debug("Evaluation reasoning", reasoning=evaluation.reasoning)
+                    logger.debug(
+                        "Evaluation reasoning", reasoning=evaluation.reasoning
+                    )
                 except Exception as e:
                     logger.error("Evaluation error", error=str(e))
-                    # Create fallback evaluation with conservative confidence
                     evaluation = ReflexionEvaluation(
                         confidence_score=0.5,
                         decision=ReflexionDecision.CONTINUE,
@@ -255,12 +378,6 @@ class ReflexionRAGEngine:
                         uncertainty_phrases=[],
                         metadata={"error": str(e)},
                     )
-                    logger.warning(
-                        "Using fallback evaluation",
-                        confidence=0.5,
-                        decision="CONTINUE",
-                        error=str(e),
-                    )
 
                 # Create reflexion cycle
                 try:
@@ -268,10 +385,12 @@ class ReflexionRAGEngine:
                         cycle_number=cycle_number,
                         query=current_query,
                         retrieved_docs=retrieved_docs,
+                        web_search_results=web_search_results,
                         partial_answer=partial_answer,
                         evaluation=evaluation,
                         timestamp=datetime.now(),
                         processing_time=time.time() - cycle_start,
+                        web_search_enabled=should_perform_web_search,
                     )
                     reflexion_memory.add_cycle(cycle)
                 except Exception as e:
@@ -281,7 +400,7 @@ class ReflexionRAGEngine:
                         cycle=cycle_number,
                     )
 
-                # Step 4: Decision tree
+                # Step 6: Decision tree
                 if evaluation.decision == ReflexionDecision.INSUFFICIENT_DATA:
                     logger.warning(
                         "Insufficient data in knowledge base",
@@ -294,7 +413,9 @@ class ReflexionRAGEngine:
                     )
                     break
 
-                elif evaluation.confidence_score >= settings.confidence_threshold:
+                elif (
+                    evaluation.confidence_score >= settings.confidence_threshold
+                ):
                     logger.info(
                         "Confidence threshold reached",
                         confidence=f"{evaluation.confidence_score:.2f}",
@@ -335,7 +456,6 @@ class ReflexionRAGEngine:
                                 cycle=cycle_number,
                             )
                         else:
-                            # Generate follow-up queries
                             try:
                                 follow_ups = await self.reflexion_evaluator.generate_follow_up_queries(
                                     question,
@@ -354,16 +474,14 @@ class ReflexionRAGEngine:
                                         "No follow-up queries generated, stopping",
                                         cycle=cycle_number,
                                     )
-                                    reflexion_memory.final_answer = partial_answer
+                                    reflexion_memory.final_answer = (
+                                        partial_answer
+                                    )
                                     break
                             except Exception as e:
                                 logger.error(
                                     "Error generating follow-up queries",
                                     error=str(e),
-                                    cycle=cycle_number,
-                                )
-                                logger.warning(
-                                    "Stopping due to follow-up generation error",
                                     cycle=cycle_number,
                                 )
                                 reflexion_memory.final_answer = partial_answer
@@ -381,30 +499,34 @@ class ReflexionRAGEngine:
                 await asyncio.sleep(0.1)  # Brief pause between cycles
 
             # Final synthesis if needed
-            if not reflexion_memory.final_answer and len(reflexion_memory.cycles) > 1:
+            if (
+                not reflexion_memory.final_answer
+                and len(reflexion_memory.cycles) > 1
+            ):
                 logger.info("Synthesizing final comprehensive answer")
                 try:
-                    reflexion_memory.final_answer = await self._synthesize_final_answer(
-                        question, reflexion_memory
+                    reflexion_memory.final_answer = (
+                        await self._synthesize_final_answer(
+                            question, reflexion_memory
+                        )
                     )
                 except Exception as e:
-                    logger.error("Error synthesizing final answer", error=str(e))
-                    # Use the best partial answer we have as fallback
+                    logger.error(
+                        "Error synthesizing final answer", error=str(e)
+                    )
                     best_cycle = max(
                         reflexion_memory.cycles,
                         key=lambda c: c.evaluation.confidence_score,
                     )
                     reflexion_memory.final_answer = (
-                        best_cycle.partial_answer or "Error synthesizing final answer."
-                    )
-                    logger.warning(
-                        "Using best partial answer as fallback",
-                        confidence=best_cycle.evaluation.confidence_score,
+                        best_cycle.partial_answer
+                        or "Error synthesizing final answer."
                     )
 
             # Stream final answer
             final_answer = (
-                reflexion_memory.final_answer or "Unable to generate a complete answer."
+                reflexion_memory.final_answer
+                or "Unable to generate a complete answer."
             )
 
             # Check if final answer appears truncated
@@ -450,17 +572,21 @@ class ReflexionRAGEngine:
                         "total_cycles": len(reflexion_memory.cycles),
                         "total_processing_time": reflexion_memory.total_processing_time,
                         "total_documents": reflexion_memory.total_documents_retrieved,
+                        "total_web_results": reflexion_memory.total_web_results_retrieved,
                         "final_confidence": reflexion_memory.cycles[
                             -1
                         ].evaluation.confidence_score
                         if reflexion_memory.cycles
                         else 0.0,
                         "memory_cached": self.memory_cache is not None,
+                        "web_search_used": any(
+                            cycle.web_search_enabled
+                            for cycle in reflexion_memory.cycles
+                        ),
                     },
                 )
             except Exception as e:
                 logger.error("Error streaming final result", error=str(e))
-                # Simple fallback with minimal metadata
                 yield StreamingChunk(
                     content=f"\n\n## Final Answer\n\n{final_answer}",
                     is_complete=True,
@@ -469,8 +595,6 @@ class ReflexionRAGEngine:
 
         except Exception as e:
             logger.error("Reflexion loop failed", error=str(e), query=question)
-
-            # Yield error message to user
             yield StreamingChunk(
                 content=f"\n\n⚠️ **Error in reflexion process:** {e}\n\nFalling back to simple RAG...\n\n",
                 metadata={"error": str(e), "is_error": True},
@@ -482,7 +606,6 @@ class ReflexionRAGEngine:
                 async for chunk in self.simple_query_stream(question):
                     yield chunk
             except Exception as fallback_error:
-                # Ultimate fallback if simple query also fails
                 logger.critical(
                     "Both reflexion and fallback methods failed",
                     original_error=str(e),
@@ -494,16 +617,106 @@ class ReflexionRAGEngine:
                     metadata={"critical_error": str(fallback_error)},
                 )
 
+    def _should_perform_web_search(self, cycle_number: int) -> bool:
+        """Determine if web search should be performed for this cycle"""
+        if settings.web_search_mode == WebSearchMode.OFF:
+            return False
+        elif settings.web_search_mode == WebSearchMode.INITIAL_ONLY:
+            return cycle_number == 1
+        elif settings.web_search_mode == WebSearchMode.EVERY_CYCLE:
+            return True
+        return False
+
+    async def _perform_web_search(self, query: str) -> List[WebSearchResult]:
+        """Perform web search and return results"""
+        if not await self.web_search.is_available():
+            logger.warning("Web search not available")
+            return []
+
+        try:
+            web_results = await self.web_search.search_and_extract(
+                query, num_results=settings.web_search_results_count
+            )
+
+            # Ensure we always return a list
+            if web_results is None:
+                return []
+
+            # Filter out failed results if needed
+            successful_results = [
+                r for r in web_results if r.status != WebSearchStatus.ERROR
+            ]
+            logger.info(
+                f"Web search completed: {len(successful_results)}/{len(web_results)} successful"
+            )
+
+            return web_results
+        except Exception as e:
+            logger.error(f"Web search failed: {e}")
+            return []
+
+    def _prepare_combined_context(
+        self, db_docs: List[Document], web_results: List[WebSearchResult]
+    ) -> str:
+        """Prepare combined context from DB documents and web search results"""
+        context_parts = []
+
+        # Add database documents
+        if db_docs:
+            context_parts.append("## Knowledge Base Documents\n")
+            for i, doc in enumerate(db_docs, 1):
+                metadata = doc.metadata
+                source = metadata.get("source", "Unknown")
+                file_name = metadata.get("file_name", "Unknown")
+                file_type = metadata.get("file_type", "Unknown")
+                creation_date = metadata.get("creation_date", "Unknown")
+                similarity = metadata.get("similarity_score", 0)
+
+                doc_header = f"""Document {i} [Similarity: {similarity:.3f}]
+                ├─ File: {file_name} ({file_type})
+                ├─ Created: {creation_date}
+                ├─ Location: {source}
+                """
+                context_parts.append(
+                    f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}"
+                )
+
+        # Add web search results
+        if web_results:
+            successful_web_results = [
+                r for r in web_results if r.status == WebSearchStatus.SUCCESS
+            ]
+            if successful_web_results:
+                context_parts.append("\n\n## Web Search Results\n")
+                for i, result in enumerate(successful_web_results, 1):
+                    web_header = f"""Web Result {i} [Rank: {result.rank}]
+                    ├─ Title: {result.title}
+                    ├─ URL: {result.url}
+                    ├─ Word Count: {result.word_count}
+                    ├─ Extraction: {result.extraction_strategy}
+                    """
+                    context_parts.append(
+                        f"{web_header}\n\nContent:\n{result.content}\n{'-' * 80}"
+                    )
+
+        return (
+            "\n\n".join(context_parts)
+            if context_parts
+            else "No relevant documents found."
+        )
+
+    # ... (rest of the methods remain the same as in your current implementation)
+
     def _is_likely_truncated(self, response: str) -> bool:
         """Check if response appears to be truncated"""
         if not response or len(response.strip()) < 50:
             return False
 
-        # Check for proper ending punctuation
-        if not any(response.strip().endswith(end) for end in [".", "!", "?", ":", ";"]):
+        if not any(
+            response.strip().endswith(end) for end in [".", "!", "?", ":", ";"]
+        ):
             return True
 
-        # Check for common truncation indicators
         truncation_indicators = [
             "...",
             "[truncated]",
@@ -513,19 +726,25 @@ class ReflexionRAGEngine:
             "token limit",
         ]
 
-        if any(indicator in response.lower() for indicator in truncation_indicators):
+        if any(
+            indicator in response.lower() for indicator in truncation_indicators
+        ):
             return True
 
         return False
 
-    async def simple_query_stream(self, question: str) -> AsyncIterator[StreamingChunk]:
+    async def simple_query_stream(
+        self, question: str
+    ) -> AsyncIterator[StreamingChunk]:
         """Simple RAG query without reflexion (fallback)"""
         logger.info("Using simple RAG mode", query=question)
 
         retrieved_docs = await self.vector_store.similarity_search(
             question, k=settings.initial_retrieval_k
         )
-        logger.debug("Retrieved documents for simple query", count=len(retrieved_docs))
+        logger.debug(
+            "Retrieved documents for simple query", count=len(retrieved_docs)
+        )
         context = self._prepare_context(retrieved_docs)
         prompt = self._create_simple_prompt(question, context)
 
@@ -543,8 +762,6 @@ class ReflexionRAGEngine:
         self, memory: ReflexionMemory
     ) -> AsyncIterator[StreamingChunk]:
         """Stream cached reflexion result"""
-
-        # Stream each cycle's partial answer
         for i, cycle in enumerate(memory.cycles, 1):
             yield StreamingChunk(
                 content=f"\n## 🔄 Cycle {i} (Cached)\n\n{cycle.partial_answer}\n",
@@ -552,11 +769,12 @@ class ReflexionRAGEngine:
                     "cycle_number": i,
                     "is_cached": True,
                     "confidence": cycle.evaluation.confidence_score,
+                    "web_search_enabled": cycle.web_search_enabled,
+                    "web_results_count": len(cycle.web_search_results),
                 },
             )
-            await asyncio.sleep(0.1)  # Simulate streaming delay
+            await asyncio.sleep(0.1)
 
-        # Stream final answer
         yield StreamingChunk(
             content=f"\n## 🎯 Final Answer (Cached)\n\n{memory.final_answer}",
             is_complete=True,
@@ -564,6 +782,7 @@ class ReflexionRAGEngine:
                 "cached_result": True,
                 "total_cycles": len(memory.cycles),
                 "total_processing_time": memory.total_processing_time,
+                "total_web_results": memory.total_web_results_retrieved,
             },
         )
 
@@ -571,12 +790,12 @@ class ReflexionRAGEngine:
         self, question: str, memory: ReflexionMemory
     ) -> str:
         """Synthesize final answer from all reflexion cycles"""
-
         partial_answers = memory.get_all_partial_answers()
         all_docs = memory.get_all_retrieved_docs()
+        all_web_results = memory.get_all_web_results()
 
         synthesis_prompt = self._create_synthesis_prompt(
-            question, partial_answers, all_docs, memory.cycles
+            question, partial_answers, all_docs, memory.cycles, all_web_results
         )
 
         answer_chunks = []
@@ -589,7 +808,6 @@ class ReflexionRAGEngine:
         self, query: str, context: str, cycle_number: int
     ) -> str:
         """Create enhanced prompt for answer generation using prompt manager"""
-
         if cycle_number == 1:
             prompt_name = "initial_generation"
         else:
@@ -604,7 +822,6 @@ class ReflexionRAGEngine:
             )
         except Exception as e:
             logger.error(f"Failed to render prompt {prompt_name}: {e}")
-            # Fallback to simple prompt
             return self._create_simple_prompt(query, context)
 
     def _create_synthesis_prompt(
@@ -613,10 +830,9 @@ class ReflexionRAGEngine:
         partial_answers: List[str],
         all_docs: List[Document],
         cycles: List[ReflexionCycle],
+        all_web_results: List[WebSearchResult],
     ) -> str:
         """Create synthesis prompt using prompt manager"""
-
-        # Prepare data as before
         answers_text = "\n\n".join(
             [
                 f"Cycle {i + 1} Answer:\n{answer}"
@@ -648,6 +864,12 @@ class ReflexionRAGEngine:
                 f"Source: {file_name} (Created: {info['creation_date']}) - {info['source']} [Appears as: {doc_nums}]"
             )
 
+        # Add web search sources
+        if all_web_results:
+            doc_references.append("\nWeb Search Sources:")
+            for i, result in enumerate(all_web_results, 1):
+                doc_references.append(f"Web {i}: {result.title} - {result.url}")
+
         references_text = "\n".join(doc_references)
 
         # Get evaluation insights
@@ -655,7 +877,13 @@ class ReflexionRAGEngine:
         for cycle in cycles:
             eval_info = f"Cycle {cycle.cycle_number}: Confidence {cycle.evaluation.confidence_score:.2f}"
             if cycle.evaluation.missing_aspects:
-                eval_info += f", Missing: {', '.join(cycle.evaluation.missing_aspects)}"
+                eval_info += (
+                    f", Missing: {', '.join(cycle.evaluation.missing_aspects)}"
+                )
+            if cycle.web_search_enabled:
+                eval_info += (
+                    f", Web Search: {len(cycle.web_search_results)} results"
+                )
             evaluation_insights.append(eval_info)
 
         insights_text = "\n".join(evaluation_insights)
@@ -670,7 +898,6 @@ class ReflexionRAGEngine:
             )
         except Exception as e:
             logger.error(f"Failed to render synthesis prompt: {e}")
-            # Fallback to hardcoded prompt
             return f"Synthesize the following answers for question: {question}\n\n{answers_text}"
 
     def _create_simple_prompt(self, question: str, context: str) -> str:
@@ -681,14 +908,12 @@ class ReflexionRAGEngine:
             )
         except Exception as e:
             logger.error(f"Failed to render simple prompt: {e}")
-            # Ultimate fallback
             return f"Answer this question based on the context:\n\nQuestion: {question}\n\nContext:\n{context}\n\nAnswer:"
 
     def _create_insufficient_data_response(
         self, question: str, partial_answers: List[str]
     ) -> str:
         """Create response when insufficient data is available"""
-
         if partial_answers:
             combined = "\n\n".join(partial_answers)
             return f"""
@@ -720,7 +945,6 @@ class ReflexionRAGEngine:
 
         context_parts = []
         for i, doc in enumerate(documents, 1):
-            # Extract comprehensive metadata
             metadata = doc.metadata
             source = metadata.get("source", "Unknown")
             file_name = metadata.get("file_name", "Unknown")
@@ -729,23 +953,19 @@ class ReflexionRAGEngine:
             last_modified = metadata.get("last_modified_date", "Unknown")
             similarity = metadata.get("similarity_score", 0)
 
-            # Create rich document header
             doc_header = f"""Document {i} [Similarity: {similarity:.3f}]
             ├─ File: {file_name} ({file_type})
             ├─ Created: {creation_date} | Modified: {last_modified}
             ├─ Location: {source}
             """
-
-            context_parts.append(f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}")
+            context_parts.append(
+                f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}"
+            )
 
         return "\n\n".join(context_parts)
 
     def get_memory_stats(self) -> Dict:
-        """Get memory cache statistics
-
-        Returns:
-            Dictionary containing memory cache statistics or status
-        """
+        """Get memory cache statistics"""
         if self.memory_cache:
             return self.memory_cache.get_stats()
         return {"cache_disabled": True}

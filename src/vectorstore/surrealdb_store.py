@@ -159,9 +159,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
         except Exception as e:
             logger.error(f"Failed to add web search results: {str(e)}")
-            raise VectorStoreException(
-                f"Failed to add web search results: {str(e)}"
-            )
+            raise VectorStoreException(f"Failed to add web search results: {str(e)}")
 
     async def similarity_search(self, query: str, k: int = 5) -> List[Document]:
         """Perform vector similarity search"""
@@ -349,9 +347,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
         except Exception as e:
             logger.error(f"Failed to delete all documents: {str(e)}")
-            raise VectorStoreException(
-                f"Failed to delete all documents: {str(e)}"
-            )
+            raise VectorStoreException(f"Failed to delete all documents: {str(e)}")
 
     async def delete_all_web_searches(self, confirm_string: str) -> bool:
         """Delete all web search results from the vector store"""
@@ -377,9 +373,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
 
         except Exception as e:
             logger.error(f"Failed to delete all web searches: {str(e)}")
-            raise VectorStoreException(
-                f"Failed to delete all web searches: {str(e)}"
-            )
+            raise VectorStoreException(f"Failed to delete all web searches: {str(e)}")
 
     def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize metadata for SurrealDB storage"""
