@@ -44,7 +44,9 @@ class SearchResultData:
 class ContentSelectors:
     """CSS selectors for different content extraction strategies"""
 
-    primary: str = "article, .article, .post, .content, main, .main-content, .entry-content"
+    primary: str = (
+        "article, .article, .post, .content, main, .main-content, .entry-content"
+    )
     secondary: str = ".post-content, .article-body, .blog-post, .story-body"
     fallback: str = 'p, .text, .description, .summary, div[class*="content"]'
 
@@ -83,18 +85,12 @@ class GoogleWebSearch(WebSearchInterface):
                 return []
 
             # Extract content from the search results
-            web_results = await self._extract_content_from_results(
-                search_results
-            )
+            web_results = await self._extract_content_from_results(search_results)
             logger.info(
                 f"Web search completed: {len(web_results)} results extracted",
                 query=query,
                 successful_extractions=len(
-                    [
-                        r
-                        for r in web_results
-                        if r.status == WebSearchStatus.SUCCESS
-                    ]
+                    [r for r in web_results if r.status == WebSearchStatus.SUCCESS]
                 ),
             )
 
@@ -126,14 +122,10 @@ class GoogleWebSearch(WebSearchInterface):
 
             # Check for API errors
             if "error" in data:
-                raise WebSearchAPIException(
-                    f"Google API Error: {data['error']}"
-                )
+                raise WebSearchAPIException(f"Google API Error: {data['error']}")
 
             items = data.get("items", [])
-            logger.info(
-                f"Google search returned {len(items)} results", query=query
-            )
+            logger.info(f"Google search returned {len(items)} results", query=query)
 
             # Convert to SearchResultData objects
             search_results = []
@@ -243,9 +235,7 @@ class GoogleWebSearch(WebSearchInterface):
                 )
 
                 # Crawl the URL - Updated API call
-                result = await crawler.arun(
-                    url=search_result.url, config=run_config
-                )
+                result = await crawler.arun(url=search_result.url, config=run_config)
 
                 # Updated: Check result success properly
                 if not result:
@@ -256,8 +246,7 @@ class GoogleWebSearch(WebSearchInterface):
 
                 if (
                     not content
-                    or len(content.strip())
-                    < settings.web_search_min_content_length
+                    or len(content.strip()) < settings.web_search_min_content_length
                 ):
                     # Use snippet as fallback
                     content = search_result.snippet
@@ -282,9 +271,7 @@ class GoogleWebSearch(WebSearchInterface):
                 )
 
             except Exception as e:
-                logger.error(
-                    f"Content extraction failed for {search_result.url}: {e}"
-                )
+                logger.error(f"Content extraction failed for {search_result.url}: {e}")
                 return WebSearchResult(
                     url=search_result.url,
                     title=search_result.title,
@@ -356,8 +343,7 @@ class GoogleWebSearch(WebSearchInterface):
         # Truncate if too long
         if len(title) > settings.web_search_max_title_length:
             title = (
-                title[: settings.web_search_max_title_length].rsplit(" ", 1)[0]
-                + "..."
+                title[: settings.web_search_max_title_length].rsplit(" ", 1)[0] + "..."
             )
 
         return title.strip()

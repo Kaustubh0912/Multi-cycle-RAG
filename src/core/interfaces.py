@@ -107,10 +107,12 @@ class ReflexionCycle:
     cycle_number: int
     query: str
     retrieved_docs: List[Document]
+    web_search_results: List[WebSearchResult]  # Added this field
     partial_answer: str
     evaluation: ReflexionEvaluation
     timestamp: datetime
     processing_time: float
+    web_search_enabled: bool = False  # Added this field
 
     def __post_init__(self):
         if not hasattr(self, "timestamp"):
@@ -126,20 +128,18 @@ class ReflexionMemory:
     final_answer: str = ""
     total_processing_time: float = 0.0
     total_documents_retrieved: int = 0
+    total_web_results_retrieved: int = 0  # Added this field
 
     def add_cycle(self, cycle: ReflexionCycle):
         """Add a reflexion cycle to memory"""
         self.cycles.append(cycle)
         self.total_processing_time += cycle.processing_time
         self.total_documents_retrieved += len(cycle.retrieved_docs)
+        self.total_web_results_retrieved += len(cycle.web_search_results)  # Added this
 
     def get_all_partial_answers(self) -> List[str]:
         """Get all partial answers from cycles"""
-        return [
-            cycle.partial_answer
-            for cycle in self.cycles
-            if cycle.partial_answer
-        ]
+        return [cycle.partial_answer for cycle in self.cycles if cycle.partial_answer]
 
     def get_all_retrieved_docs(self) -> List[Document]:
         """Get all unique retrieved documents"""
@@ -151,6 +151,17 @@ class ReflexionMemory:
                     all_docs.append(doc)
                     seen_ids.add(doc.doc_id)
         return all_docs
+
+    def get_all_web_results(self) -> List[WebSearchResult]:  # Added this method
+        """Get all web search results from cycles"""
+        all_results = []
+        seen_urls = set()
+        for cycle in self.cycles:
+            for result in cycle.web_search_results:
+                if result.url not in seen_urls:
+                    all_results.append(result)
+                    seen_urls.add(result.url)
+        return all_results
 
 
 class LLMInterface(ABC):

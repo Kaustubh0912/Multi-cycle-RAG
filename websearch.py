@@ -95,7 +95,9 @@ class ExtractedContent:
 class ContentSelectors:
     """CSS selectors for different content extraction strategies"""
 
-    primary: str = "article, .article, .post, .content, main, .main-content, .entry-content"
+    primary: str = (
+        "article, .article, .post, .content, main, .main-content, .entry-content"
+    )
     secondary: str = ".post-content, .article-body, .blog-post, .story-body"
     fallback: str = 'p, .text, .description, .summary, div[class*="content"]'
 
@@ -110,9 +112,7 @@ class GoogleSearchExtractor:
         self.base_url = "https://www.googleapis.com/customsearch/v1"
         self.session = requests.Session()
 
-    def search(
-        self, query: str, num_results: int = 5
-    ) -> Optional[Dict[str, Any]]:
+    def search(self, query: str, num_results: int = 5) -> Optional[Dict[str, Any]]:
         """Perform Google Custom Search and return results"""
         params = {
             "key": self.api_key,
@@ -143,9 +143,7 @@ class GoogleSearchExtractor:
             console.print(f"[red]Unexpected search error: {str(e)}[/red]")
             return None
 
-    def extract_search_results(
-        self, search_data: Dict[str, Any]
-    ) -> List[SearchResult]:
+    def extract_search_results(self, search_data: Dict[str, Any]) -> List[SearchResult]:
         """Extract SearchResult objects from search data"""
         results = []
         if "items" in search_data:
@@ -168,9 +166,7 @@ class GoogleSearchExtractor:
                     urls.append(item["link"])
         return urls
 
-    def display_search_results(
-        self, search_results: List[SearchResult]
-    ) -> None:
+    def display_search_results(self, search_results: List[SearchResult]) -> None:
         """Display search results in a formatted table"""
         if not search_results:
             console.print("[yellow]No search results found[/yellow]")
@@ -220,20 +216,14 @@ class SmartContentExtractor:
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
             ) as progress:
-                task = progress.add_task(
-                    "Extracting content...", total=len(urls)
-                )
+                task = progress.add_task("Extracting content...", total=len(urls))
 
                 for url in urls:
                     try:
-                        progress.update(
-                            task, description=f"Processing: {url[:50]}..."
-                        )
+                        progress.update(task, description=f"Processing: {url[:50]}...")
 
                         # Try extraction strategies in order
-                        content = await self._extract_with_fallback(
-                            crawler, url
-                        )
+                        content = await self._extract_with_fallback(crawler, url)
                         results.append(content)
 
                     except Exception as e:
@@ -265,13 +255,10 @@ class SmartContentExtractor:
 
         for strategy in strategies:
             try:
-                content = await self._extract_with_strategy(
-                    crawler, url, strategy
-                )
+                content = await self._extract_with_strategy(crawler, url, strategy)
 
-                if (
-                    content.status == ContentStatus.SUCCESS
-                    and self._is_quality_content(content.content)
+                if content.status == ContentStatus.SUCCESS and self._is_quality_content(
+                    content.content
                 ):
                     return content
 
@@ -313,9 +300,7 @@ class SmartContentExtractor:
 
                 if hasattr(markdown, "fit_markdown") and markdown.fit_markdown:
                     markdown_content = str(markdown.fit_markdown)
-                elif (
-                    hasattr(markdown, "raw_markdown") and markdown.raw_markdown
-                ):
+                elif hasattr(markdown, "raw_markdown") and markdown.raw_markdown:
                     markdown_content = str(markdown.raw_markdown)
                 elif markdown:
                     markdown_content = str(markdown)
@@ -325,18 +310,14 @@ class SmartContentExtractor:
 
                     return ExtractedContent(
                         url=url,
-                        title=self._extract_title_from_markdown(
-                            cleaned_content
-                        ),
+                        title=self._extract_title_from_markdown(cleaned_content),
                         content=cleaned_content,
                         status=ContentStatus.SUCCESS,
                         strategy=strategy,
                     )
 
             # Handle failure cases
-            error_msg = getattr(
-                result, "error_message", "Failed to extract content"
-            )
+            error_msg = getattr(result, "error_message", "Failed to extract content")
             return ExtractedContent(
                 url=url,
                 title="Failed to extract",
@@ -447,9 +428,7 @@ class SmartContentExtractor:
 
         cleaned = content
         for pattern in nav_patterns:
-            cleaned = re.sub(
-                pattern, "", cleaned, flags=re.MULTILINE | re.IGNORECASE
-            )
+            cleaned = re.sub(pattern, "", cleaned, flags=re.MULTILINE | re.IGNORECASE)
 
         # Remove excessive whitespace
         cleaned = re.sub(r"\n\s*\n\s*\n", "\n\n", cleaned)
@@ -501,9 +480,7 @@ class SmartContentExtractor:
             "follow us",
         ]
         content_lower = content.lower()
-        nav_count = sum(
-            1 for indicator in nav_indicators if indicator in content_lower
-        )
+        nav_count = sum(1 for indicator in nav_indicators if indicator in content_lower)
 
         if nav_count > 3:  # Too many navigation elements
             return False
@@ -567,9 +544,7 @@ class ContentExtractorApp:
                 "GOOGLE_API_KEY and GOOGLE_CSE_ID must be set in environment variables"
             )
 
-        self.search_client = GoogleSearchExtractor(
-            GOOGLE_API_KEY, GOOGLE_CSE_ID
-        )
+        self.search_client = GoogleSearchExtractor(GOOGLE_API_KEY, GOOGLE_CSE_ID)
         self.crawl_client = SmartContentExtractor()
 
     async def process_query(self, query: str, num_results: int = 5) -> None:
@@ -603,13 +578,9 @@ class ContentExtractorApp:
         # Step 5: Display results
         self._display_extracted_content(extracted_content)
 
-    def _display_extracted_content(
-        self, content_list: List[ExtractedContent]
-    ) -> None:
+    def _display_extracted_content(self, content_list: List[ExtractedContent]) -> None:
         """Display extracted content in a readable format"""
-        console.print(
-            "\n[bold green]📄 Content Extraction Results:[/bold green]"
-        )
+        console.print("\n[bold green]📄 Content Extraction Results:[/bold green]")
 
         successful_extractions = [
             c for c in content_list if c.status == ContentStatus.SUCCESS
@@ -621,14 +592,10 @@ class ContentExtractorApp:
         for i, content in enumerate(content_list, 1):
             self._display_single_content(content, i)
 
-    def _display_single_content(
-        self, content: ExtractedContent, index: int
-    ) -> None:
+    def _display_single_content(self, content: ExtractedContent, index: int) -> None:
         """Display a single content extraction result"""
         console.print(f"\n{'=' * 80}")
-        console.print(
-            f"[bold cyan]Result #{index}: {content.title}[/bold cyan]"
-        )
+        console.print(f"[bold cyan]Result #{index}: {content.title}[/bold cyan]")
         console.print(f"[dim]URL: {content.url}[/dim]")
         console.print(f"[dim]Status: {content.status.value}[/dim]")
 
@@ -642,9 +609,7 @@ class ContentExtractorApp:
         if content.status == ContentStatus.SUCCESS:
             self._display_successful_content(content, index)
         else:
-            error_msg = (
-                content.error_message or content.content or "Unknown error"
-            )
+            error_msg = content.error_message or content.content or "Unknown error"
             console.print(f"[red]{error_msg}[/red]")
 
     def _display_successful_content(
@@ -673,9 +638,7 @@ class ContentExtractorApp:
         if save_option.lower() == "y":
             self._save_content_to_file(content, index)
 
-    def _save_content_to_file(
-        self, content: ExtractedContent, index: int
-    ) -> None:
+    def _save_content_to_file(self, content: ExtractedContent, index: int) -> None:
         """Save content to a markdown file"""
         filename = self._generate_safe_filename(content.title, index)
 
@@ -727,9 +690,7 @@ class ContentExtractorApp:
                     continue
 
                 if not user_input:
-                    console.print(
-                        "[yellow]Please enter a search query[/yellow]"
-                    )
+                    console.print("[yellow]Please enter a search query[/yellow]")
                     continue
 
                 # Get number of results
@@ -754,9 +715,7 @@ class ContentExtractorApp:
         console.print(
             "[dim]Features: Smart content filtering, navigation removal, quality validation[/dim]"
         )
-        console.print(
-            "[dim]Commands: Enter search query, 'help', or 'exit'[/dim]\n"
-        )
+        console.print("[dim]Commands: Enter search query, 'help', or 'exit'[/dim]\n")
 
     def _get_num_results(self) -> int:
         """Get number of results from user input"""
