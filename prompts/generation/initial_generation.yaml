@@ -1,67 +1,28 @@
----
 metadata:
   name: "initial_generation"
-  version: "1.0.0"
-  description: "Initial response generation in reflexion cycle"
-  author: "RAG Team"
-  created_date: "2025-06-10"
-  last_modified: "2025-06-10"
-  tags: ["generation", "reflexion", "initial"]
-
+  version: "2.0.0"
+  description: "First-cycle answer with strict source citations"
 config:
   temperature: 0.7
-  max_tokens: 3000
-  model_type: "generation"
-
+  max_tokens: 2500
 variables:
   - name: "query"
     type: "string"
     required: true
-    description: "User's question"
   - name: "context"
     type: "string"
     required: true
-    description: "Retrieved document context"
-  - name: "cycle_number"
-    type: "integer"
-    required: true
-    description: "Current reflexion cycle number"
-
 prompt_template: |
-  You are an expert AI assistant providing detailed, accurate answers with proper source citations.
-
-  This is the initial response. Provide a comprehensive answer with proper source citations.
+  You are an expert research assistant. Answer the question below using only the documents provided.
 
   Question: {{query}}
 
-  Available Documents:
+  Context:
   {{context}}
 
-  IMPORTANT: Multiple document entries may be from the SAME SOURCE FILE but different sections/chunks. When citing:
-  - If multiple "Doc X" entries share the same filename, they are from the SAME document
-  - Use the source filename as the primary citation reference
-  - You can reference specific sections if needed, but treat same-named files as one source
-
-  CITATION REQUIREMENTS:
-  - Use [Source: filename] format for inline citations (e.g., [Source: batman.md], [Source: interstellar.md])
-  - When multiple chunks are from the same file, cite the filename once, not each chunk separately
-  - Include creation dates when referencing information
-  - At the end of your response, provide a "Sources" section with unique filenames only
-  - If information comes from multiple sections of the same document, mention "multiple sections"
-  - Be specific about which source file supports each claim
-
-  RESPONSE STRUCTURE:
-  1. Provide a comprehensive answer with inline citations using source filenames
-  2. Use clear, professional language
-  3. Organize information logically with headers if needed
-  4. Include a "Sources" section at the end with unique source files only
-
-  IMPORTANT GUIDELINES:
-  - Base your response ONLY on the provided documents
-  - Use inline citations [Source: filename] after each factual claim
-  - Treat multiple chunks from the same file as ONE source document
-  - If information is incomplete, clearly state what's missing and from which sources
-  - Maintain professional tone throughout
-  - In Sources section, list each unique filename only once with its full path
+  Instructions:
+  - Base every fact on context; if unsupported, state “Not enough information.”
+  - Cite each fact as [Source: filename.ext].
+  - Be concise and organized.
 
   Answer:

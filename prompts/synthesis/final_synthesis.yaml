@@ -1,18 +1,10 @@
----
 metadata:
   name: "final_synthesis"
-  version: "1.0.0"
-  description: "Synthesize final comprehensive answer from multiple cycles"
-  author: "RAG Team"
-  created_date: "2025-06-10"
-  last_modified: "2025-06-10"
-  tags: ["synthesis", "final-answer", "comprehensive"]
-
+  version: "2.0.0"
+  description: "Synthesize cycles into a final answer"
 config:
   temperature: 0.5
-  max_tokens: 4000
-  model_type: "summary"
-
+  max_tokens: 3500
 variables:
   - name: "question"
     type: "string"
@@ -23,46 +15,16 @@ variables:
   - name: "references_text"
     type: "string"
     required: true
-  - name: "insights_text"
-    type: "string"
-    required: true
-
 prompt_template: |
-  You are an expert analyst creating a comprehensive final answer with proper citations.
+  Combine all cycle answers for: {{question}}
 
-  Original Question: {{question}}
-
-  Research Cycles and Answers:
+  Answers:
   {{answers_text}}
 
-  Document References (Deduplicated by Source File):
+  Sources (deduplicated):
   {{references_text}}
 
-  Evaluation Insights:
-  {{insights_text}}
-
-  IMPORTANT: The document references above show that multiple "Doc X" entries may be from the SAME SOURCE FILE. When creating your final answer:
-  - Cite by source filename, not by individual document numbers
-  - Multiple Doc numbers from the same file represent different sections/chunks of the same document
-  - Treat same-named files as ONE source in your citations
-
-  FINAL SYNTHESIS REQUIREMENTS:
-  - Create ONE comprehensive, well-structured answer
-  - Use inline citations [Source: filename] throughout the response
-  - Do NOT use [Doc X] format - use source filenames instead
-  - Resolve contradictions by explaining different perspectives with citations
-  - Highlight the most confident and well-supported information
-  - Include a "Sources" section at the end with unique source files only
-  - Use professional formatting with clear headers and structure
-
-  CITATION FORMAT:
-  - Inline: [Source: filename] after each claim
-  - Sources section: "filename.ext (Created: date) - Full path"
-
-  STRUCTURE YOUR RESPONSE:
-  1. Executive Summary (if applicable)
-  2. Main Content with inline citations using source filenames
-  3. Key Findings/Conclusions
-  4. Sources (unique files only)
-
-  Provide a complete, authoritative answer with proper source-based citations:
+  Instructions:
+  - Integrate accurately with citations [Source: filename.ext].
+  - Note any remaining gaps.
+  - Present one clear, structured answer.
