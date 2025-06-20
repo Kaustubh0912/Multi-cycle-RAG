@@ -196,7 +196,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
                         **result.get("metadata", {}),
                         "similarity_score": result.get("score", 0.0),
                     },
-                    doc_id=result.get("id"),
+                    doc_id=str(result.get("id")),
                 )
                 documents.append(doc)
 
@@ -249,7 +249,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
                                 "similarity_score": result.get("score", 0.0),
                                 "source_type": "document",
                             },
-                            doc_id=result.get("id"),
+                            doc_id=str(result.get("id")),
                         )
                         all_documents.append(doc)
 
@@ -264,7 +264,7 @@ class SurrealDBVectorStore(VectorStoreInterface):
                                 "similarity_score": result.get("score", 0.0),
                                 "source_type": "web_search",
                             },
-                            doc_id=result.get("id"),
+                            doc_id=str(result.get("id")),
                         )
                         all_documents.append(doc)
 

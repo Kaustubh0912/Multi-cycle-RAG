@@ -43,7 +43,9 @@ class SearchResultData:
 class ContentSelectors:
     """CSS selectors for different content extraction strategies"""
 
-    primary: str = "article, .article, .post, .content, main, .main-content, .entry-content"
+    primary: str = (
+        "article, .article, .post, .content, main, .main-content, .entry-content"
+    )
     secondary: str = ".post-content, .article-body, .blog-post, .story-body"
     fallback: str = 'p, .text, .description, .summary, div[class*="content"]'
 
@@ -89,9 +91,7 @@ class GoogleWebSearch(WebSearchInterface):
                 return []
 
             # Extract content from search results
-            web_results = await self._extract_content_from_results(
-                search_results
-            )
+            web_results = await self._extract_content_from_results(search_results)
 
             successful_count = len(
                 [r for r in web_results if r.status == WebSearchStatus.SUCCESS]
@@ -130,31 +130,23 @@ class GoogleWebSearch(WebSearchInterface):
 
                 if response.status_code == 429:  # Rate limited
                     wait_time = 2**attempt  # Exponential backoff
-                    logger.warning(
-                        f"Rate limited, waiting {wait_time}s before retry"
-                    )
+                    logger.warning(f"Rate limited, waiting {wait_time}s before retry")
                     await asyncio.sleep(wait_time)
                     continue
 
                 response.raise_for_status()
                 break
             else:
-                raise WebSearchAPIException(
-                    "Max retries exceeded due to rate limiting"
-                )
+                raise WebSearchAPIException("Max retries exceeded due to rate limiting")
 
             data = response.json()
 
             # Check for API errors
             if "error" in data:
-                raise WebSearchAPIException(
-                    f"Google API Error: {data['error']}"
-                )
+                raise WebSearchAPIException(f"Google API Error: {data['error']}")
 
             items = data.get("items", [])
-            logger.info(
-                f"Google search returned {len(items)} results", query=query
-            )
+            logger.info(f"Google search returned {len(items)} results", query=query)
 
             # Convert to SearchResultData objects
             search_results = []
@@ -278,14 +270,10 @@ class GoogleWebSearch(WebSearchInterface):
                 )
 
                 # CORRECTED: Crawl the URL with proper error handling
-                result = await crawler.arun(
-                    url=search_result.url, config=run_config
-                )
+                result = await crawler.arun(url=search_result.url, config=run_config)
 
                 # CORRECTED: Robust content extraction
-                content = await self._extract_content_with_strategies_fixed(
-                    result
-                )
+                content = await self._extract_content_with_strategies_fixed(result)
 
                 if self._validate_content(content, search_result.url):
                     status = WebSearchStatus.SUCCESS
@@ -311,9 +299,7 @@ class GoogleWebSearch(WebSearchInterface):
                 )
 
             except Exception as e:
-                logger.error(
-                    f"Content extraction failed for {search_result.url}: {e}"
-                )
+                logger.error(f"Content extraction failed for {search_result.url}: {e}")
                 return WebSearchResult(
                     url=search_result.url,
                     title=search_result.title,
@@ -335,23 +321,16 @@ class GoogleWebSearch(WebSearchInterface):
 
                 # Try different markdown access patterns based on working example
                 content = ""
-                if (
-                    hasattr(markdown_obj, "fit_markdown")
-                    and markdown_obj.fit_markdown
-                ):
+                if hasattr(markdown_obj, "fit_markdown") and markdown_obj.fit_markdown:
                     content = str(markdown_obj.fit_markdown).strip()
                 elif (
-                    hasattr(markdown_obj, "raw_markdown")
-                    and markdown_obj.raw_markdown
+                    hasattr(markdown_obj, "raw_markdown") and markdown_obj.raw_markdown
                 ):
                     content = str(markdown_obj.raw_markdown).strip()
                 elif markdown_obj:
                     content = str(markdown_obj).strip()
 
-                if (
-                    content
-                    and len(content) >= settings.web_search_min_content_length
-                ):
+                if content and len(content) >= settings.web_search_min_content_length:
                     cleaned_content = self._clean_content_advanced(content)
                     if (
                         cleaned_content
@@ -364,15 +343,9 @@ class GoogleWebSearch(WebSearchInterface):
 
         # Strategy 2: Try cleaned HTML
         try:
-            if (
-                hasattr(crawl_result, "cleaned_html")
-                and crawl_result.cleaned_html
-            ):
+            if hasattr(crawl_result, "cleaned_html") and crawl_result.cleaned_html:
                 content = self._html_to_text(crawl_result.cleaned_html)
-                if (
-                    content
-                    and len(content) >= settings.web_search_min_content_length
-                ):
+                if content and len(content) >= settings.web_search_min_content_length:
                     return content
         except Exception as e:
             logger.debug(f"Cleaned HTML extraction failed: {e}")
@@ -381,10 +354,7 @@ class GoogleWebSearch(WebSearchInterface):
         try:
             if hasattr(crawl_result, "html") and crawl_result.html:
                 content = self._html_to_text(crawl_result.html)
-                if (
-                    content
-                    and len(content) >= settings.web_search_min_content_length
-                ):
+                if content and len(content) >= settings.web_search_min_content_length:
                     return content
         except Exception as e:
             logger.debug(f"Raw HTML extraction failed: {e}")
@@ -413,9 +383,7 @@ class GoogleWebSearch(WebSearchInterface):
 
         cleaned = content
         for pattern in nav_patterns:
-            cleaned = re.sub(
-                pattern, "", cleaned, flags=re.MULTILINE | re.IGNORECASE
-            )
+            cleaned = re.sub(pattern, "", cleaned, flags=re.MULTILINE | re.IGNORECASE)
 
         # Remove excessive whitespace
         cleaned = re.sub(r"\n\s*\n\s*\n", "\n\n", cleaned)
@@ -454,10 +422,7 @@ class GoogleWebSearch(WebSearchInterface):
 
     def _validate_content(self, content: str, url: str) -> bool:
         """Validate extracted content quality"""
-        if (
-            not content
-            or len(content.strip()) < settings.web_search_min_content_length
-        ):
+        if not content or len(content.strip()) < settings.web_search_min_content_length:
             return False
 
         # Check for common error pages
@@ -514,8 +479,7 @@ class GoogleWebSearch(WebSearchInterface):
         # Truncate if too long
         if len(title) > settings.web_search_max_title_length:
             title = (
-                title[: settings.web_search_max_title_length].rsplit(" ", 1)[0]
-                + "..."
+                title[: settings.web_search_max_title_length].rsplit(" ", 1)[0] + "..."
             )
 
         return title.strip()

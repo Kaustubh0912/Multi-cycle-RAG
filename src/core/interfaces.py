@@ -230,6 +230,14 @@ class VectorStoreInterface(ABC):
         """Delete all documents from the vector store"""
         pass
 
+    # ADD THIS METHOD:
+    @abstractmethod
+    async def add_web_search_results(
+        self, web_results: List[WebSearchResult]
+    ) -> List[str]:
+        """Add web search results to the vector store"""
+        pass
+
 
 class WebSearchInterface(ABC):
     """Abstract interface for web search implementations"""

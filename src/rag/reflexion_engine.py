@@ -62,8 +62,8 @@ class ReflexionRAGEngine:
         )
 
         self.vector_store = vector_store or SurrealDBVectorStore()
-        self.reflexion_evaluator = (
-            reflexion_evaluator or SmartReflexionEvaluator(self.evaluation_llm)
+        self.reflexion_evaluator = reflexion_evaluator or SmartReflexionEvaluator(
+            self.evaluation_llm
         )
 
         # Web search integration
@@ -87,12 +87,8 @@ class ReflexionRAGEngine:
         Returns:
             Number of documents successfully ingested
         """
-        documents = await self.document_loader.load_from_directory(
-            directory_path
-        )
-        processed_docs = await self.document_processor.process_documents(
-            documents
-        )
+        documents = await self.document_loader.load_from_directory(directory_path)
+        processed_docs = await self.document_processor.process_documents(documents)
         doc_ids = await self.vector_store.add_documents(processed_docs)
         return len(doc_ids)
 
@@ -114,12 +110,8 @@ class ReflexionRAGEngine:
             try:
                 cached_memory = self.memory_cache.get(query_hash)
                 if cached_memory:
-                    logger.info(
-                        "Found cached reflexion result", query_hash=query_hash
-                    )
-                    async for chunk in self._stream_cached_result(
-                        cached_memory
-                    ):
+                    logger.info("Found cached reflexion result", query_hash=query_hash)
+                    async for chunk in self._stream_cached_result(cached_memory):
                         yield chunk
                     return
             except Exception as e:
@@ -139,9 +131,7 @@ class ReflexionRAGEngine:
 
             while cycle_number <= settings.max_reflexion_cycles:
                 logger.info("Starting reflexion cycle", cycle=cycle_number)
-                logger.info(
-                    "Processing query", query=current_query, cycle=cycle_number
-                )
+                logger.info("Processing query", query=current_query, cycle=cycle_number)
 
                 cycle_start = time.time()
                 web_search_results = []
@@ -233,9 +223,7 @@ class ReflexionRAGEngine:
                                 )
                             ) or []
                         except Exception as e:
-                            logger.error(
-                                "Document retrieval error", error=str(e)
-                            )
+                            logger.error("Document retrieval error", error=str(e))
                             retrieved_docs = []
 
                         logger.info(
@@ -278,9 +266,7 @@ class ReflexionRAGEngine:
                                     "is_partial": True,
                                     "reflexion_mode": True,
                                     "web_search_enabled": should_perform_web_search,
-                                    "web_results_count": len(
-                                        web_search_results
-                                    ),
+                                    "web_results_count": len(web_search_results),
                                 },
                             )
                     yield StreamingChunk(
@@ -292,9 +278,7 @@ class ReflexionRAGEngine:
                         },
                     )
                 except Exception as e:
-                    logger.error(
-                        "Generation error", error=str(e), cycle=cycle_number
-                    )
+                    logger.error("Generation error", error=str(e), cycle=cycle_number)
                     partial_answer_chunks = ["Error generating response."]
                     yield StreamingChunk(
                         content="⚠️ Error during response generation. Attempting recovery...",
@@ -349,13 +333,11 @@ class ReflexionRAGEngine:
                 # Step 5: Self-evaluation
                 logger.info("Evaluating response quality", cycle=cycle_number)
                 try:
-                    evaluation = (
-                        await self.reflexion_evaluator.evaluate_response(
-                            question,
-                            partial_answer,
-                            retrieved_docs,
-                            cycle_number,
-                        )
+                    evaluation = await self.reflexion_evaluator.evaluate_response(
+                        question,
+                        partial_answer,
+                        retrieved_docs,
+                        cycle_number,
                     )
                     logger.info(
                         "Evaluation complete",
@@ -363,9 +345,7 @@ class ReflexionRAGEngine:
                         decision=evaluation.decision.name,
                         cycle=cycle_number,
                     )
-                    logger.debug(
-                        "Evaluation reasoning", reasoning=evaluation.reasoning
-                    )
+                    logger.debug("Evaluation reasoning", reasoning=evaluation.reasoning)
                 except Exception as e:
                     logger.error("Evaluation error", error=str(e))
                     evaluation = ReflexionEvaluation(
@@ -413,9 +393,7 @@ class ReflexionRAGEngine:
                     )
                     break
 
-                elif (
-                    evaluation.confidence_score >= settings.confidence_threshold
-                ):
+                elif evaluation.confidence_score >= settings.confidence_threshold:
                     logger.info(
                         "Confidence threshold reached",
                         confidence=f"{evaluation.confidence_score:.2f}",
@@ -474,9 +452,7 @@ class ReflexionRAGEngine:
                                         "No follow-up queries generated, stopping",
                                         cycle=cycle_number,
                                     )
-                                    reflexion_memory.final_answer = (
-                                        partial_answer
-                                    )
+                                    reflexion_memory.final_answer = partial_answer
                                     break
                             except Exception as e:
                                 logger.error(
@@ -499,34 +475,25 @@ class ReflexionRAGEngine:
                 await asyncio.sleep(0.1)  # Brief pause between cycles
 
             # Final synthesis if needed
-            if (
-                not reflexion_memory.final_answer
-                and len(reflexion_memory.cycles) > 1
-            ):
+            if not reflexion_memory.final_answer and len(reflexion_memory.cycles) > 1:
                 logger.info("Synthesizing final comprehensive answer")
                 try:
-                    reflexion_memory.final_answer = (
-                        await self._synthesize_final_answer(
-                            question, reflexion_memory
-                        )
+                    reflexion_memory.final_answer = await self._synthesize_final_answer(
+                        question, reflexion_memory
                     )
                 except Exception as e:
-                    logger.error(
-                        "Error synthesizing final answer", error=str(e)
-                    )
+                    logger.error("Error synthesizing final answer", error=str(e))
                     best_cycle = max(
                         reflexion_memory.cycles,
                         key=lambda c: c.evaluation.confidence_score,
                     )
                     reflexion_memory.final_answer = (
-                        best_cycle.partial_answer
-                        or "Error synthesizing final answer."
+                        best_cycle.partial_answer or "Error synthesizing final answer."
                     )
 
             # Stream final answer
             final_answer = (
-                reflexion_memory.final_answer
-                or "Unable to generate a complete answer."
+                reflexion_memory.final_answer or "Unable to generate a complete answer."
             )
 
             # Check if final answer appears truncated
@@ -712,9 +679,7 @@ class ReflexionRAGEngine:
         if not response or len(response.strip()) < 50:
             return False
 
-        if not any(
-            response.strip().endswith(end) for end in [".", "!", "?", ":", ";"]
-        ):
+        if not any(response.strip().endswith(end) for end in [".", "!", "?", ":", ";"]):
             return True
 
         truncation_indicators = [
@@ -726,25 +691,19 @@ class ReflexionRAGEngine:
             "token limit",
         ]
 
-        if any(
-            indicator in response.lower() for indicator in truncation_indicators
-        ):
+        if any(indicator in response.lower() for indicator in truncation_indicators):
             return True
 
         return False
 
-    async def simple_query_stream(
-        self, question: str
-    ) -> AsyncIterator[StreamingChunk]:
+    async def simple_query_stream(self, question: str) -> AsyncIterator[StreamingChunk]:
         """Simple RAG query without reflexion (fallback)"""
         logger.info("Using simple RAG mode", query=question)
 
         retrieved_docs = await self.vector_store.similarity_search(
             question, k=settings.initial_retrieval_k
         )
-        logger.debug(
-            "Retrieved documents for simple query", count=len(retrieved_docs)
-        )
+        logger.debug("Retrieved documents for simple query", count=len(retrieved_docs))
         context = self._prepare_context(retrieved_docs)
         prompt = self._create_simple_prompt(question, context)
 
@@ -877,13 +836,9 @@ class ReflexionRAGEngine:
         for cycle in cycles:
             eval_info = f"Cycle {cycle.cycle_number}: Confidence {cycle.evaluation.confidence_score:.2f}"
             if cycle.evaluation.missing_aspects:
-                eval_info += (
-                    f", Missing: {', '.join(cycle.evaluation.missing_aspects)}"
-                )
+                eval_info += f", Missing: {', '.join(cycle.evaluation.missing_aspects)}"
             if cycle.web_search_enabled:
-                eval_info += (
-                    f", Web Search: {len(cycle.web_search_results)} results"
-                )
+                eval_info += f", Web Search: {len(cycle.web_search_results)} results"
             evaluation_insights.append(eval_info)
 
         insights_text = "\n".join(evaluation_insights)
@@ -958,9 +913,7 @@ class ReflexionRAGEngine:
             ├─ Created: {creation_date} | Modified: {last_modified}
             ├─ Location: {source}
             """
-            context_parts.append(
-                f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}"
-            )
+            context_parts.append(f"{doc_header}\n\nContent:\n{doc.content}\n{'-' * 80}")
 
         return "\n\n".join(context_parts)
 
