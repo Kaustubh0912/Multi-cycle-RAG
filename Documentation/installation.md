@@ -1,7 +1,6 @@
 # Installation Guide
 
 This guide provides comprehensive instructions for setting up the Reflexion RAG Engine in different environments.
-
 ## System Requirements
 
 ### Minimum Requirements
@@ -9,7 +8,7 @@ This guide provides comprehensive instructions for setting up the Reflexion RAG 
 - **Python**: 3.13 or higher
 - **RAM**: 4GB minimum, 8GB recommended
 - **Storage**: 2GB free space for installation, additional space for documents
-- **Network**: Internet connection for model APIs and SurrealDB cloud
+- **Network**: Internet connection for GitHub Models API and SurrealDB cloud
 
 ### Recommended Requirements
 - **RAM**: 16GB or higher for large document collections
@@ -20,6 +19,7 @@ This guide provides comprehensive instructions for setting up the Reflexion RAG 
 ### Dependencies
 - **GitHub Personal Access Token** with Models access
 - **SurrealDB** instance (local or cloud)
+- **Google API Key** (optional, for web search)
 - **UV Package Manager** (recommended) or pip
 
 ## Prerequisites Setup
@@ -102,6 +102,16 @@ curl --proto '=https' --tlsv1.2 -sSf https://install.surrealdb.com | sh
 # Start local instance
 surreal start --log trace --user root --pass root memory
 ```
+
+### 5. Google Search API Setup (Optional)
+
+Skip this step if you don't need web search functionality.
+
+1. Create a Google Cloud project at [console.cloud.google.com](https://console.cloud.google.com/)
+2. Enable the "Custom Search API" for your project
+3. Create API credentials and note your API key
+4. Go to [Programmable Search Engine](https://programmablesearchengine.google.com/)
+5. Create a new search engine, configure sites to search, and note your Search Engine ID (cx)
 
 ## Installation Methods
 
@@ -191,7 +201,6 @@ SUMMARY_MODEL=meta/Meta-Llama-3.1-70B-Instruct
 # Azure AI Inference Embeddings
 EMBEDDING_MODEL=text-embedding-3-large
 EMBEDDING_ENDPOINT=https://models.inference.ai.azure.com
-EMBEDDING_PROVIDER=azure_ai
 EMBEDDING_BATCH_SIZE=100
 
 # SurrealDB Configuration
@@ -202,15 +211,19 @@ SURREALDB_USER=your_username
 SURREALDB_PASS=your_password
 
 # Reflexion Settings
-ENABLE_REFLEXION_LOOP=true
-MAX_REFLEXION_CYCLES=5
-CONFIDENCE_THRESHOLD=0.8
+MAX_REFLEXION_CYCLES=3
+CONFIDENCE_THRESHOLD=0.85
 INITIAL_RETRIEVAL_K=3
 REFLEXION_RETRIEVAL_K=5
 
+# Web Search Configuration (Optional)
+WEB_SEARCH_MODE=off  # off, initial_only, every_cycle
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_CSE_ID=your_custom_search_engine_id
+
 # Performance Settings
 ENABLE_MEMORY_CACHE=true
-MAX_CACHE_SIZE=1000
+MAX_CACHE_SIZE=100
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
 ```
@@ -283,14 +296,11 @@ uv run rag.py chat
 
 # Try a simple query
 Query: What is the main topic of the documents?
-
-# Try a complex query to test reflexion
-Query: Provide a comprehensive analysis comparing the different approaches mentioned in the documents, including their advantages and limitations.
 ```
 
-## Advanced Installation Options
+## Docker Installation
 
-### Docker Installation
+### Basic Docker Setup
 
 ```bash
 # Build Docker image
@@ -303,44 +313,31 @@ docker run --env-file .env -v $(pwd)/docs:/app/docs reflexion-rag
 docker-compose up -d
 ```
 
-### Kubernetes Deployment
+### Docker Compose
 
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
+Create a `docker-compose.yml` file:
 
-# Check deployment status
-kubectl get pods -l app=reflexion-rag
+```yaml
+version: '3.8'
 
-# Access logs
-kubectl logs -f deployment/reflexion-rag
-```
+services:
+  reflexion-rag:
+    build: .
+    volumes:
+      - ./docs:/app/docs
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"  # If you add a web API later
+    restart: unless-stopped
 
-### Cloud Deployment
-
-#### AWS
-```bash
-# Using AWS CDK
-cdk deploy --all
-
-# Or using CloudFormation
-aws cloudformation create-stack --stack-name reflexion-rag --template-body file://aws/cloudformation.yaml
-```
-
-#### Google Cloud
-```bash
-# Deploy to Cloud Run
-gcloud run deploy reflexion-rag --source .
-
-# Or use Kubernetes Engine
-gcloud container clusters create reflexion-rag-cluster
-kubectl apply -f k8s/
-```
-
-#### Azure
-```bash
-# Deploy to Container Instances
-az container create --resource-group myResourceGroup --name reflexion-rag --image reflexion-rag:latest
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    command: start --user root --pass root file:/data/database.db
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"
 ```
 
 ## Troubleshooting
@@ -393,7 +390,7 @@ from src.vectorstore.surrealdb_store import SurrealDBVectorStore
 
 async def test():
     store = SurrealDBVectorStore()
-    await store.connect()
+    await store._ensure_connection()
     print('Connected successfully!')
 
 asyncio.run(test())
@@ -416,6 +413,7 @@ curl -H "Authorization: Bearer YOUR_GITHUB_TOKEN" https://models.inference.ai.az
 - Enable memory cache: `ENABLE_MEMORY_CACHE=true`
 - Use local SurrealDB for faster queries
 - Reduce `MAX_REFLEXION_CYCLES` for faster responses
+- Consider using smaller models for evaluation and generation
 
 #### 2. Memory Issues
 - Reduce `MAX_CACHE_SIZE`
@@ -427,7 +425,7 @@ curl -H "Authorization: Bearer YOUR_GITHUB_TOKEN" https://models.inference.ai.az
 - Check internet connectivity
 - Verify SurrealDB URL accessibility
 - Test GitHub Models API availability
-- Consider using local models for offline operation
+- Consider using local SurrealDB instance
 
 ### Debugging
 
@@ -435,24 +433,19 @@ curl -H "Authorization: Bearer YOUR_GITHUB_TOKEN" https://models.inference.ai.az
 ```bash
 # Set environment variables
 export LOG_LEVEL=DEBUG
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
 # Run with verbose output
 uv run rag.py chat --verbose
 ```
 
-#### Check System Resources
+#### Monitor Logs
 ```bash
-# Monitor system resources
-htop  # Linux/macOS
-# or use Task Manager on Windows
+# Check logs in real-time
+tail -f logs/reflexion_rag.log
 
-# Check disk space
-df -h  # Linux/macOS
-dir  # Windows
-
-# Monitor network
-netstat -an | grep 8000  # Check if ports are in use
+# Filter for specific components
+grep "vector" logs/reflexion_rag.log
 ```
 
 ## Verification
@@ -471,7 +464,7 @@ netstat -an | grep 8000  # Check if ports are in use
 - [ ] Chat interface responds to queries
 - [ ] Reflexion cycles complete successfully
 - [ ] Memory cache functioning (if enabled)
-- [ ] Performance within acceptable ranges
+- [ ] Web search working (if configured)
 
 ### Health Check Script
 
@@ -488,24 +481,46 @@ from src.rag.engine import RAGEngine
 
 async def test():
     engine = RAGEngine()
-    response = await engine.query_stream('Test query')
-    async for chunk in response:
-        print(chunk.content, end='')
+    response = ''
+    async for chunk in engine.query_stream('Test query'):
+        response += chunk.content
         break  # Just test first chunk
+    print('Successfully received response')
 
 asyncio.run(test())
 "
 ```
 
+## Updating
+
+### Regular Updates
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Update dependencies
+uv sync
+
+# Check for breaking changes
+uv run rag.py config
+```
+
+### Major Version Updates
+
+For major version updates, it's recommended to:
+
+1. Backup your `.env` file and documents
+2. Create a fresh clone of the repository
+3. Set up a new environment
+4. Restore your `.env` file and documents
+5. Re-ingest documents if the embedding model has changed
+
 ## Next Steps
 
 After successful installation:
 
-1. **Read the [Configuration Guide](configuration.md)** for advanced settings
-2. **Explore the [API Documentation](api.md)** for programmatic usage
-3. **Check the [Performance Tuning Guide](performance.md)** for optimization
-4. **Review the [Architecture Documentation](architecture.md)** to understand the system
-5. **Join the community** on [GitHub Discussions](https://github.com/cloaky233/rag_new/discussions)
+- **Read the [API Documentation](api.md)** for programmatic usage
 
 ## Support
 
@@ -514,9 +529,8 @@ If you encounter issues during installation:
 1. **Check the [Troubleshooting Guide](troubleshooting.md)**
 2. **Search existing [GitHub Issues](https://github.com/cloaky233/rag_new/issues)**
 3. **Create a new issue** with detailed error information
-4. **Join the [Discord community](https://discord.gg/reflexion-rag)** for real-time help
-5. **Contact the author**: [laysheth1@gmail.com](mailto:laysheth1@gmail.com)
+4. **Contact the author**: [laysheth1@gmail.com](mailto:laysheth1@gmail.com)
 
 ---
 
-*Installation guide last updated: June 2025*
+*Installation guide last updated: June 22, 2025*

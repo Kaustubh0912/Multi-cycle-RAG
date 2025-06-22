@@ -2,9 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![GitHub](https://img.shields.io/badge/github-cloaky233/rag_new-green.svg)](https://github.com/cloaky233/rag_new)
+[![GitHub](https://img.shields.io/badge/github-reflexion--rag-green.svg)](https://github.com/cloaky233/rag_new)
 
-A production-ready Retrieval Augmented Generation (RAG) system with advanced self-correction, gap detection, and iterative query loops. Built for complex reasoning tasks that require multi-step refinement and comprehensive analysis.
+A production-ready Retrieval Augmented Generation (RAG) system with advanced self-correction, iterative refinement, and comprehensive web search integration. Built for complex reasoning tasks requiring multi-step analysis and comprehensive knowledge synthesis.
+
+<p align="center">
+  <img src="https://github.com/CLoaKY233/rag_new/blob/main/Images/banner1.jpg" width="400"/>
+</p>
 
 ## 🚀 Key Features
 
@@ -19,16 +23,23 @@ A production-ready Retrieval Augmented Generation (RAG) system with advanced sel
 - **Generation Model**: Meta-Llama-3.1-405B for primary answer generation
 - **Evaluation Model**: Cohere-command-r for self-assessment and confidence scoring
 - **Summary Model**: Meta-Llama-3.1-70B for final synthesis across cycles
-- **Embedding Model**: text-embedding-3-large (3072D) via Azure AI Inference
+- **40+ GitHub Models**: Access to the full GitHub Models ecosystem
+
+### 🌐 Web Search Integration
+- **Google Custom Search**: Real-time web search with configurable modes
+- **Content Extraction**: Advanced web content extraction using Crawl4AI
+- **Hybrid Retrieval**: Seamlessly combines vector store and web search results
+- **Intelligent Filtering**: Content quality assessment and relevance scoring
 
 ### 🚀 High-Performance Infrastructure
-- **Azure AI Inference Integration**: Superior semantic understanding with 3072-dimensional embeddings
+- **Azure AI Inference**: Superior semantic understanding with 3072-dimensional embeddings
 - **SurrealDB Vector Store**: Native vector search with HNSW indexing for production scalability
 - **Intelligent Memory Caching**: LRU-based cache with hit rate tracking
 - **Streaming Architecture**: Real-time response streaming with progress indicators
 - **Async Design**: Non-blocking operations throughout the pipeline
 
 ### 🎯 Enterprise-Ready Features
+- **YAML Prompt Management**: Template-based prompt system with versioning
 - **Production Monitoring**: Comprehensive logging, error handling, and performance metrics
 - **Modular Design**: Clean architecture with dependency injection and clear interfaces
 - **Context-Aware Processing**: Dynamic retrieval scaling with intelligent context management
@@ -36,23 +47,23 @@ A production-ready Retrieval Augmented Generation (RAG) system with advanced sel
 
 ## 📊 Performance Metrics
 
-Based on extensive testing with complex, multi-faceted queries:
-
 - **40%+ improvement** in answer comprehensiveness compared to traditional RAG
 - **60%+ improvement** in semantic similarity accuracy with 3072D embeddings
 - **25%+ performance boost** in vector search with SurrealDB HNSW indexing
+- **Real-time web search** integration for up-to-date information
 - **Sub-linear search** performance even with millions of documents
 
-## 🛠 Installation
+## 🛠 Quick Start
 
 ### Prerequisites
 
-- **Python 3.13+** with UV package manager
+- **Python 3.13+** with UV package manager (recommended)
 - **GitHub Personal Access Token** with Models access
-- **8GB+ RAM** for optimal performance
-- **SurrealDB** for vector storage (local or cloud instance)
+- **SurrealDB** instance (local or cloud)
+- **Google Search API** credentials (optional, for web search)
+- **8GB+ RAM** recommended for optimal performance
 
-### Quick Setup
+### Installation
 
 ```bash
 # Clone the repository
@@ -66,7 +77,7 @@ uv sync
 
 # Configure environment variables
 cp .env.example .env
-# Edit .env with your GitHub token and SurrealDB connection details
+# Edit .env with your credentials
 
 # Ingest documents
 uv run rag.py ingest --docs_path=./docs
@@ -89,13 +100,6 @@ SUMMARY_MODEL=meta/Meta-Llama-3.1-70B-Instruct
 # Azure AI Inference Embeddings
 EMBEDDING_MODEL=text-embedding-3-large
 EMBEDDING_ENDPOINT=https://models.inference.ai.azure.com
-EMBEDDING_PROVIDER=azure_ai
-EMBEDDING_BATCH_SIZE=100
-
-# Reflexion Settings
-ENABLE_REFLEXION_LOOP=true
-MAX_REFLEXION_CYCLES=5
-CONFIDENCE_THRESHOLD=0.8
 
 # SurrealDB Configuration
 SURREALDB_URL=wss://your-surreal-instance.surreal.cloud
@@ -104,11 +108,20 @@ SURREALDB_DB=rag
 SURREALDB_USER=your_username
 SURREALDB_PASS=your_password
 
-# Performance Settings
+# Reflexion Settings
+MAX_REFLEXION_CYCLES=3
+CONFIDENCE_THRESHOLD=0.85
 INITIAL_RETRIEVAL_K=3
 REFLEXION_RETRIEVAL_K=5
+
+# Web Search Configuration (Optional)
+WEB_SEARCH_MODE=off  # off, initial_only, every_cycle
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_CSE_ID=your_custom_search_engine_id
+
+# Performance Settings
 ENABLE_MEMORY_CACHE=true
-MAX_CACHE_SIZE=1000
+MAX_CACHE_SIZE=100
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
 ```
@@ -134,47 +147,50 @@ uv run rag.py delete
 ### Programmatic Usage
 
 ```python
-from rag.src import AdvancedRAGEngine
+from src.rag.engine import RAGEngine
 import asyncio
 
 async def main():
     # Initialize the RAG engine
-    engine = AdvancedRAGEngine()
+    engine = RAGEngine()
 
     # Process a query with reflexion
-    response = await engine.query("What is the impact of blockchain on financial inclusion?")
-    print(response)
-
-    # Stream a response for real-time output
-    async for chunk in engine.query_stream("How does machine learning improve healthcare outcomes?"):
+    response = ""
+    async for chunk in engine.query_stream("What are the benefits of renewable energy?"):
+        response += chunk.content
         print(chunk.content, end="")
+
+    return response
 
 # Run the async function
 asyncio.run(main())
 ```
 
-### Advanced Example: Custom Reflexion Flow
+### Advanced Example with Metadata
 
 ```python
 import asyncio
-from rag.src.rag.engine import RAGEngine
+from src.rag.engine import RAGEngine
 
-async def analyze_complex_topic():
+async def advanced_query():
     engine = RAGEngine()
 
-    # Complex query requiring multiple perspectives
-    query = "Analyze the environmental, economic, and social impacts of renewable energy adoption"
+    query = "Compare different machine learning approaches for natural language processing"
 
     print("🔄 Starting Reflexion Analysis...")
+    current_cycle = 0
 
     async for chunk in engine.query_stream(query):
+        # Handle metadata
         if chunk.metadata:
             cycle = chunk.metadata.get("cycle_number", 1)
             confidence = chunk.metadata.get("confidence_score", 0)
 
-            if cycle > 1:
+            if cycle != current_cycle:
+                current_cycle = cycle
                 print(f"\n--- Cycle {cycle} (Confidence: {confidence:.2f}) ---")
 
+        # Print content
         print(chunk.content, end="")
 
         # Check for completion
@@ -185,7 +201,7 @@ async def analyze_complex_topic():
             print(f"Processing Time: {stats.get('total_processing_time', 0):.2f}s")
             print(f"Final Confidence: {stats.get('final_confidence', 0):.2f}")
 
-asyncio.run(analyze_complex_topic())
+asyncio.run(advanced_query())
 ```
 
 ## 🏗 Architecture Overview
@@ -193,12 +209,12 @@ asyncio.run(analyze_complex_topic())
 ### Core Components
 
 ```
-ReflexionRAGEngine
-├── Generation Pipeline (Llama-405B)
+Reflexion RAG Engine
+├── Generation Pipeline (Meta-Llama-405B)
 │   ├── Initial Response Generation
-│   ├── Context Retrieval (k=3)
+│   ├── Context Retrieval & Web Search
 │   └── Streaming Output
-├── Evaluation System (Cohere)
+├── Evaluation System (Cohere-command-r)
 │   ├── Confidence Scoring
 │   ├── Gap Analysis
 │   ├── Follow-up Generation
@@ -207,14 +223,19 @@ ReflexionRAGEngine
 │   ├── Query Caching
 │   ├── Hit Rate Tracking
 │   └── Automatic Eviction
+├── Web Search Engine
+│   ├── Google Custom Search
+│   ├── Content Extraction
+│   ├── Quality Assessment
+│   └── Hybrid Retrieval
 └── Decision Engine
     ├── CONTINUE (confidence < threshold)
     ├── REFINE_QUERY (specific gaps identified)
-    ├── COMPLETE (high confidence ≥0.8)
+    ├── COMPLETE (high confidence ≥0.85)
     └── INSUFFICIENT_DATA (knowledge base gaps)
 
-DocumentPipeline
-├── Multi-format Loading (PDF, TXT, DOCX, MD)
+Document Pipeline
+├── Multi-format Loading (PDF, TXT, DOCX, MD, HTML)
 ├── Intelligent Chunking (1000 chars, 200 overlap)
 ├── Azure AI Embeddings (3072D vectors)
 └── SurrealDB Storage (HNSW indexing)
@@ -226,11 +247,11 @@ DocumentPipeline
 graph TB
     A[User Query] --> B[Initial Generation]
     B --> C[Self-Evaluation]
-    C --> D{Confidence ≥ 0.8?}
+    C --> D{Confidence ≥ 0.85?}
     D -->|Yes| E[Complete Response]
     D -->|No| F[Gap Analysis]
     F --> G[Generate Follow-up Queries]
-    G --> H[Enhanced Retrieval]
+    G --> H[Enhanced Retrieval + Web Search]
     H --> I[Synthesis Cycle]
     I --> C
     E --> J[Final Answer]
@@ -239,28 +260,59 @@ graph TB
 ## 📁 Project Structure
 
 ```
-rag_new/
+rag/
 ├── src/                    # Main source code
 │   ├── config/            # Configuration management
-│   ├── core/              # Core utilities and base classes
-│   ├── data/              # Data models and schemas
-│   ├── embeddings/        # Embedding providers (Azure AI, HuggingFace)
-│   ├── llm/               # LLM interfaces and wrappers
+│   │   ├── __init__.py
+│   │   └── settings.py    # Pydantic settings with env support
+│   ├── core/              # Core interfaces and exceptions
+│   │   ├── __init__.py
+│   │   ├── exceptions.py  # Custom exception classes
+│   │   └── interfaces.py  # Abstract base classes
+│   ├── data/              # Document loading and processing
+│   │   ├── __init__.py
+│   │   ├── loader.py      # Multi-format document loader
+│   │   └── processor.py   # Text chunking and preprocessing
+│   ├── embeddings/        # Embedding providers
+│   │   ├── __init__.py
+│   │   └── github_embeddings.py  # Azure AI Inference
+│   ├── llm/               # LLM interfaces and implementations
+│   │   ├── __init__.py
+│   │   └── github_llm.py  # GitHub Models integration
 │   ├── memory/            # Caching and memory management
-│   ├── rag/               # Main RAG engine implementation
-│   ├── reflexion/         # Reflexion evaluation and logic
-│   ├── utils/             # Utility functions and helpers
-│   └── vectorstore/       # Vector storage implementations
+│   │   ├── __init__.py
+│   │   └── cache.py       # LRU cache for reflexion memory
+│   ├── rag/               # Main RAG engine
+│   │   ├── __init__.py
+│   │   ├── engine.py      # Main RAG engine interface
+│   │   └── reflexion_engine.py  # Reflexion implementation
+│   ├── reflexion/         # Reflexion evaluation logic
+│   │   ├── __init__.py
+│   │   └── evaluator.py   # Smart evaluation and follow-up
+│   ├── utils/             # Utility functions
+│   │   ├── __init__.py
+│   │   └── logging.py     # Structured logging
+│   ├── vectorstore/       # Vector storage implementations
+│   │   ├── __init__.py
+│   │   └── surrealdb_store.py  # SurrealDB vector store
+│   └── websearch/         # Web search integration
+│       ├── __init__.py
+│       └── google_search.py  # Google Search with content extraction
 ├── prompts/               # YAML prompt templates
-│   ├── generation/        # Generation prompts
+│   ├── __init__.py
+│   ├── manager.py         # Prompt template manager
 │   ├── evaluation/        # Evaluation prompts
-│   └── follow_up/         # Follow-up query prompts
-├── schema/                # Data validation schemas
-├── models/                # Model configurations
-├── documentation/         # Comprehensive documentation
-├── tests/                 # Test suite
+│   ├── generation/        # Generation prompts
+│   ├── synthesis/         # Synthesis prompts
+│   └── templates/         # Base templates
+├── schema/                # SurrealDB schema definitions
+│   ├── documents.surql    # Document table schema
+│   ├── web_search.surql   # Web search results schema
+│   └── *.surql           # Database functions
+├── Documentation/         # Comprehensive documentation
 ├── rag.py                 # Main CLI entry point
-├── pyproject.toml         # Project dependencies
+├── pyproject.toml         # Project dependencies and metadata
+├── .env.example           # Example environment configuration
 └── README.md              # This file
 ```
 
@@ -268,107 +320,154 @@ rag_new/
 
 ### Model Selection
 
-Choose from 40+ GitHub Models for different tasks:
-
 ```python
-# High-parameter models for complex generation
-LLM_MODEL="meta/Meta-Llama-3.1-405B-Instruct"
+# Generation Models (Primary Response)
+LLM_MODEL=meta/Meta-Llama-3.1-405B-Instruct  # High-quality generation
+LLM_MODEL=meta/Meta-Llama-3.1-70B-Instruct   # Balanced performance
+LLM_MODEL=microsoft/Phi-3-mini-4k-instruct   # Fast responses
 
-# Efficient models for evaluation tasks
-EVALUATION_MODEL="cohere/Cohere-command-r"
+# Evaluation Models (Self-Assessment)
+EVALUATION_MODEL=cohere/Cohere-command-r      # Recommended
+EVALUATION_MODEL=mistralai/Mistral-7B-Instruct-v0.3
 
-# Specialized models for domain-specific synthesis
-SUMMARY_MODEL="meta/Meta-Llama-3.1-70B-Instruct"
+# Summary Models (Final Synthesis)
+SUMMARY_MODEL=meta/Meta-Llama-3.1-70B-Instruct
+SUMMARY_MODEL=meta/Meta-Llama-3.1-8B-Instruct
 ```
 
 ### Performance Tuning
 
 ```bash
 # Reflexion Parameters
-MAX_REFLEXION_CYCLES=5          # Maximum iteration cycles
-CONFIDENCE_THRESHOLD=0.8        # Completion threshold
+MAX_REFLEXION_CYCLES=3          # Faster responses
+MAX_REFLEXION_CYCLES=5          # More comprehensive answers
+CONFIDENCE_THRESHOLD=0.7        # Lower threshold for completion
+CONFIDENCE_THRESHOLD=0.9        # Higher quality requirement
+
+# Retrieval Configuration
 INITIAL_RETRIEVAL_K=3           # Documents for first cycle
 REFLEXION_RETRIEVAL_K=5         # Documents for follow-up cycles
 
-# Embedding Optimization
-EMBEDDING_BATCH_SIZE=100        # Batch processing size
-EMBEDDING_PROVIDER=azure_ai     # Provider selection
+# Web Search Configuration
+WEB_SEARCH_MODE=off             # Disable web search
+WEB_SEARCH_MODE=initial_only    # Search only on first cycle
+WEB_SEARCH_MODE=every_cycle     # Search on every cycle
 
 # Memory Management
 ENABLE_MEMORY_CACHE=true        # Enable LRU caching
-MAX_CACHE_SIZE=1000            # Maximum cache entries
+MAX_CACHE_SIZE=1000            # Cache size (adjust for RAM)
 ```
 
-## 📈 Monitoring and Observability
+## 📈 Monitoring and Performance
 
-### Built-in Metrics
+### Real-time Metrics
 
-- Real-time confidence scoring and cycle tracking
-- Memory cache hit rates and performance metrics
-- Processing time analysis across reflexion cycles
-- Document retrieval effectiveness monitoring
-- SurrealDB connection health and query performance
-- Embedding generation metrics and batch processing efficiency
+- **Reflexion Cycles**: Track iteration count and decision points
+- **Confidence Scoring**: Monitor answer quality and completion confidence
+- **Memory Cache**: Hit rates and performance improvements
+- **Processing Time**: End-to-end response time analysis
+- **Web Search**: Integration success and content quality
+- **Vector Search**: SurrealDB query performance and indexing efficiency
 
 ### Performance Dashboard
 
 ```python
 # Get comprehensive engine statistics
-engine_info = rag.get_engine_info()
+from src.rag.engine import RAGEngine
+
+engine = RAGEngine()
+engine_info = engine.get_engine_info()
+
 print(f"Engine Type: {engine_info['engine_type']}")
 print(f"Max Cycles: {engine_info['max_reflexion_cycles']}")
 print(f"Memory Cache: {engine_info['memory_cache_enabled']}")
-print(f"Cache Hit Rate: {engine_info['memory_stats']['hit_rate']:.2%}")
+
+if 'memory_stats' in engine_info:
+    memory = engine_info['memory_stats']
+    print(f"Cache Hit Rate: {memory.get('hit_rate', 0):.2%}")
+    print(f"Cache Size: {memory.get('size', 0)}/{memory.get('max_size', 0)}")
 ```
 
-## 🔄 Migration from Previous Versions
+## 🔍 Web Search Integration
 
-### Important: Embedding Model Upgrade
+### Google Custom Search Setup
 
-If upgrading from previous versions, you'll need to re-ingest documents due to the change from 384D to 3072D embeddings:
+1. **Create Google Cloud Project**: Enable Custom Search API
+2. **Create Custom Search Engine**: Configure search scope and preferences
+3. **Get API Credentials**: Obtain API key and Custom Search Engine ID
+4. **Configure Environment**: Add credentials to `.env` file
+
+### Web Search Modes
+
+- **OFF**: Traditional RAG without web search
+- **INITIAL_ONLY**: Web search only on the first reflexion cycle
+- **EVERY_CYCLE**: Web search on every reflexion cycle for maximum coverage
+
+### Content Extraction
+
+- **Crawl4AI Integration**: Advanced web content extraction
+- **Quality Assessment**: Content validation and filtering
+- **Smart Truncation**: Token-aware content limiting
+- **Error Handling**: Graceful fallback to snippets
+
+## 🚀 Deployment
+
+### Local Development
 
 ```bash
-# Delete existing embeddings
-uv run rag.py delete
+# Clone and setup
+git clone https://github.com/cloaky233/rag_new
+cd rag_new
+uv venv && source .venv/bin/activate
+uv sync
 
-# Re-ingest with new Azure AI embeddings
-uv run rag.py ingest --docs_path=./docs
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials
+
+# Start development
+uv run rag.py chat
 ```
 
-### Migration Benefits
+### Production Deployment
 
-- **Superior Quality**: 60%+ improvement in semantic understanding
-- **Better Performance**: 25%+ faster vector search with SurrealDB
-- **Enhanced Reliability**: Azure-backed infrastructure
-- **Improved Flexibility**: Configurable embedding providers
+```bash
+# Using Docker
+docker build -t reflexion-rag .
+docker run --env-file .env -v $(pwd)/docs:/app/docs reflexion-rag
+
+# Using systemd service
+sudo cp reflexion-rag.service /etc/systemd/system/
+sudo systemctl enable reflexion-rag
+sudo systemctl start reflexion-rag
+```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](documentation/CONTRIBUTING.md) for details.
+We welcome contributions! Areas for improvement:
 
-### Key Areas for Contribution
-
-- **LLM Integration**: Additional model providers and optimization strategies
-- **Embedding Models**: Support for additional Azure AI models and providers
-- **Vector Stores**: SurrealDB optimization and hybrid search capabilities
-- **Evaluation Metrics**: Enhanced confidence scoring and quality assessment
-- **UI/UX**: Web interface and visualization improvements
-- **Performance**: Caching strategies and processing optimizations
+- **Additional LLM Providers**: Support for more model providers
+- **Vector Stores**: Alternative vector storage backends
+- **Web Search**: Additional search engines and providers
+- **Performance**: Optimization and caching improvements
+- **UI/UX**: Web interface and visualization tools
 
 ## 📚 Documentation
 
-- [Installation Guide](documentation/installation.md)
-- [API Documentation](documentation/api.md)
+- [Installation Guide](Documentation/installation.md) - Detailed setup instructions
+- [API Documentation](Documentation/api.md) - Programming interface reference
+- [Configuration Guide](Documentation/configuration.md) - Advanced configuration options
+- [Performance Guide](Documentation/performance.md) - Optimization and tuning
+- [Troubleshooting](Documentation/troubleshooting.md) - Common issues and solutions
 
 ## 🛣 Roadmap
 
-See our [Roadmap](ROADMAP.md) for upcoming features including:
+- **Model Context Protocol (MCP)**: AI-powered document ingestion
+- **Advanced Web Search**: Multi-engine search with fact checking
+- **Rust Performance**: High-performance Rust extensions
+- **Modern Web Interface**: React/Vue.js frontend with FastAPI backend
 
-- Model Context Protocol (MCP) client integration
-- AI-powered document ingestion
-- Web search tool integration
-- Rust optimization for performance bottlenecks
-- FastAPI backend with modern frontend
+See [ROADMAP.md](ROADMAP.md) for detailed future plans.
 
 ## 📄 License
 
@@ -377,17 +476,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 Built with:
-- [GitHub Models](https://github.com/features/models) for seamless AI integration
-- [Azure AI Inference](https://azure.microsoft.com/en-us/products/ai-services) for high-quality embeddings
-- [SurrealDB](https://surrealdb.com/) for high-performance vector operations
-- [UV](https://github.com/astral-sh/uv) for dependency management
+- [GitHub Models](https://github.com/features/models) - AI model infrastructure
+- [Azure AI Inference](https://azure.microsoft.com/products/ai-services) - High-quality embeddings
+- [SurrealDB](https://surrealdb.com/) - Modern database for vector operations
+- [Crawl4AI](https://github.com/unclecode/crawl4ai) - Web content extraction
 
 ## 👨‍💻 Author
 
 **Lay Sheth** ([@cloaky233](https://github.com/cloaky233))
 - AI Engineer & Enthusiast
 - B.Tech Computer Science Student at VIT Bhopal
-- SIH 2024 Finalist
 - Portfolio: [cloaky.works](https://cloaky.works)
 
 ## 📞 Support
@@ -399,4 +497,4 @@ Built with:
 
 ---
 
-*Production-ready RAG with human-like iterative reasoning capabilities, high-dimensional semantic understanding, and cloud-native vector storage.*
+*Production-ready RAG with human-like iterative reasoning, real-time web search, and enterprise-grade vector storage.*
