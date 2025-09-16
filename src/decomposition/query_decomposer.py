@@ -42,16 +42,12 @@ class SmartQueryDecomposer(QueryDecomposerInterface):
 
         # Check for complexity indicators
         complexity_score = sum(
-            1
-            for indicator in self.complexity_indicators
-            if indicator in query_lower
+            1 for indicator in self.complexity_indicators if indicator in query_lower
         )
 
         # Check for multiple question marks or conjunctions
         question_marks = query.count("?")
-        conjunctions = len(
-            re.findall(r"\b(and|or|but|while|whereas)\b", query_lower)
-        )
+        conjunctions = len(re.findall(r"\b(and|or|but|while|whereas)\b", query_lower))
 
         # Check query length (longer queries often benifit from decomposition)
         word_count = len(query.split())
@@ -78,9 +74,7 @@ class SmartQueryDecomposer(QueryDecomposerInterface):
         decomposition_prompt = self._create_decomposition_prompt(query, context)
 
         try:
-            response = await self.llm.generate(
-                decomposition_prompt, temperature=0.3
-            )
+            response = await self.llm.generate(decomposition_prompt, temperature=0.3)
             sub_queries = self._parse_sub_queries(response)
 
             # Ensure we have valid sub-queries
@@ -167,9 +161,7 @@ class ContextAwareDecomposer(SmartQueryDecomposer):
         # Build context from conversation history
         if self.conversation_history and not context:
             context_parts = []
-            for interaction in self.conversation_history[
-                -2:
-            ]:  # Last 2 interactions
+            for interaction in self.conversation_history[-2:]:  # Last 2 interactions
                 context_parts.append(f"Q: {interaction['query']}")
                 context_parts.append(
                     f"A: {interaction['response'][:200]}..."

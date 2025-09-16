@@ -36,25 +36,17 @@ class AdvancedRAGEngine:
 
         # Choose decomposer type
         if use_context_aware_decomposer:
-            self.query_decomposer = query_decomposer or ContextAwareDecomposer(
-                self.llm
-            )
+            self.query_decomposer = query_decomposer or ContextAwareDecomposer(self.llm)
         else:
-            self.query_decomposer = query_decomposer or SmartQueryDecomposer(
-                self.llm
-            )
+            self.query_decomposer = query_decomposer or SmartQueryDecomposer(self.llm)
 
         self.document_loader = DocumentLoader()
         self.document_processor = DocumentProcessor()
 
     async def ingest_documents(self, directory_path: str) -> int:
         """Ingest documents from directory"""
-        documents = await self.document_loader.load_from_directory(
-            directory_path
-        )
-        processed_docs = await self.document_processor.process_documents(
-            documents
-        )
+        documents = await self.document_loader.load_from_directory(directory_path)
+        processed_docs = await self.document_processor.process_documents(documents)
         doc_ids = await self.vector_store.add_documents(processed_docs)
         return len(doc_ids)
 
@@ -124,9 +116,7 @@ class AdvancedRAGEngine:
 
         # Step 3: Synthesize final answer with reasoning
         print("\n🧠 Synthesizing final answer...")
-        final_answer = await self._synthesize_final_answer(
-            question, sub_queries
-        )
+        final_answer = await self._synthesize_final_answer(question, sub_queries)
 
         # Step 4: Add to conversation history if using context-aware decomposer
         if isinstance(self.query_decomposer, ContextAwareDecomposer):
@@ -165,9 +155,7 @@ class AdvancedRAGEngine:
                 chunk.metadata = {
                     "decomposition_used": True,
                     "num_sub_queries": len(decomposed.sub_queries),
-                    "sub_queries": [
-                        sq.question for sq in decomposed.sub_queries
-                    ],
+                    "sub_queries": [sq.question for sq in decomposed.sub_queries],
                     "reasoning_steps": decomposed.reasoning_steps,
                 }
                 self._decomp_metadata_sent = True
@@ -177,9 +165,7 @@ class AdvancedRAGEngine:
         if hasattr(self, "_decomp_metadata_sent"):
             delattr(self, "_decomp_metadata_sent")
 
-    async def query(
-        self, question: str, k: Optional[int] = None
-    ) -> QueryResult:
+    async def query(self, question: str, k: Optional[int] = None) -> QueryResult:
         """Regular RAG query (backward compatibility)"""
         k = k or settings.retrieval_k
         relevant_docs = await self.vector_store.similarity_search(question, k=k)
@@ -219,9 +205,7 @@ class AdvancedRAGEngine:
         self, original_question: str, sub_queries: List[SubQuery]
     ) -> str:
         """Synthesize final answer from sub-query results"""
-        synthesis_prompt = self._create_synthesis_prompt(
-            original_question, sub_queries
-        )
+        synthesis_prompt = self._create_synthesis_prompt(original_question, sub_queries)
         return await self.llm.generate(synthesis_prompt, temperature=0.5)
 
     def _create_synthesis_prompt(

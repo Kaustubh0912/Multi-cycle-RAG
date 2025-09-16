@@ -45,9 +45,7 @@ async def test_decomposition():
         print(
             f"   - Number of sub-queries: {safe_metadata_get(result, 'num_sub_queries', 0)}"
         )
-        print(
-            f"   - Total sources: {safe_metadata_get(result, 'total_sources', 0)}"
-        )
+        print(f"   - Total sources: {safe_metadata_get(result, 'total_sources', 0)}")
 
         print("\n🎯 Final Answer:")
         print(result.final_answer)
@@ -93,9 +91,7 @@ async def interactive_decomposition_chat():
 
             if streaming_mode:
                 print("🤖 Assistant: ", end="", flush=True)
-                async for chunk in rag.query_with_decomposition_stream(
-                    question
-                ):
+                async for chunk in rag.query_with_decomposition_stream(question):
                     if chunk.content:
                         print(chunk.content, end="", flush=True)
                 print()  # New line

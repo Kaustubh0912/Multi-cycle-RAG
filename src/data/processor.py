@@ -7,9 +7,7 @@ from ..core.interfaces import Document
 class CustomTextSplitter:
     """Custom text splitter with recursive character splitting"""
 
-    def __init__(
-        self, chunk_size: int, chunk_overlap: int, separators: List[str]
-    ):
+    def __init__(self, chunk_size: int, chunk_overlap: int, separators: List[str]):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.separators = separators
@@ -17,9 +15,7 @@ class CustomTextSplitter:
     def split_text(self, text: str) -> List[str]:
         """Split text recursively using different separators"""
 
-        def _split_text_recursive(
-            text: str, separators: List[str]
-        ) -> List[str]:
+        def _split_text_recursive(text: str, separators: List[str]) -> List[str]:
             if len(text) <= self.chunk_size:
                 return [text] if text.strip() else []
 
@@ -27,9 +23,7 @@ class CustomTextSplitter:
                 # No more separators, force split by character count
                 return [
                     text[i : i + self.chunk_size]
-                    for i in range(
-                        0, len(text), self.chunk_size - self.chunk_overlap
-                    )
+                    for i in range(0, len(text), self.chunk_size - self.chunk_overlap)
                 ]
 
             separator = separators[0]
@@ -39,9 +33,7 @@ class CustomTextSplitter:
                 # Character-level splitting
                 return [
                     text[i : i + self.chunk_size]
-                    for i in range(
-                        0, len(text), self.chunk_size - self.chunk_overlap
-                    )
+                    for i in range(0, len(text), self.chunk_size - self.chunk_overlap)
                 ]
 
             parts = text.split(separator)
@@ -57,9 +49,7 @@ class CustomTextSplitter:
 
                     if len(part) > self.chunk_size:
                         # Part is too long, recursively split it
-                        result.extend(
-                            _split_text_recursive(part, remaining_separators)
-                        )
+                        result.extend(_split_text_recursive(part, remaining_separators))
                         current_chunk = ""
                     else:
                         current_chunk = part
@@ -82,9 +72,7 @@ class DocumentProcessor:
             separators=["\n\n", "\n", ". ", " ", ""],
         )
 
-    async def process_documents(
-        self, documents: List[Document]
-    ) -> List[Document]:
+    async def process_documents(self, documents: List[Document]) -> List[Document]:
         """Process documents with intelligent chunking"""
         processed_docs = []
         for doc in documents:
@@ -101,17 +89,14 @@ class DocumentProcessor:
                         if v is not None:
                             chunk_metadata[k] = v
                         else:
-                            chunk_metadata[k] = (
-                                ""  # Replace None with empty string
-                            )
+                            chunk_metadata[k] = ""  # Replace None with empty string
 
                     # Add chunk-specific metadata
                     chunk_metadata.update(
                         {
                             "chunk_index": i,
                             "total_chunks": len(chunks),
-                            "original_doc_id": doc.doc_id
-                            or "",  # Ensure not None
+                            "original_doc_id": doc.doc_id or "",  # Ensure not None
                         }
                     )
 

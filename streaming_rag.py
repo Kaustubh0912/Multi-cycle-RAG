@@ -12,9 +12,7 @@ async def test_streaming():
 
     # Test a regular query here
     print("Regular Query:")
-    result = await rag.query(
-        "What is the main topic discussed in the documents?"
-    )
+    result = await rag.query("What is the main topic discussed in the documents?")
     print(f"Response: {result.response}\n")
     print(f"Sources used: {result.metadata['num_sources']}\n")
 
@@ -24,9 +22,7 @@ async def test_streaming():
 
     full_response = ""
     usage_info = None
-    async for chunk in rag.query_stream(
-        "Summarize the key points from the documents"
-    ):
+    async for chunk in rag.query_stream("Summarize the key points from the documents"):
         if chunk.content:
             print(chunk.content, end="", flush=True)
             full_response += chunk.content

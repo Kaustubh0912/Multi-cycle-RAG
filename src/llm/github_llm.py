@@ -80,7 +80,7 @@ class GitHubLLM(LLMInterface):
                 temperature=kwargs.get("temperature", self.temperature),
                 max_tokens=kwargs.get("max_tokens", self.max_tokens),
                 top_p=kwargs.get("top_p", 1.0),
-                model_extras={"stream_options": {"include_usage": True}},
+                # model_extras={"stream_options": {"include_usage": True}},
             )
             for update in response:
                 chunk_content = ""
@@ -97,12 +97,8 @@ class GitHubLLM(LLMInterface):
                         "completion_tokens": getattr(
                             update.usage, "completion_tokens", 0
                         ),
-                        "prompt_tokens": getattr(
-                            update.usage, "prompt_tokens", 0
-                        ),
-                        "total_tokens": getattr(
-                            update.usage, "total_tokens", 0
-                        ),
+                        "prompt_tokens": getattr(update.usage, "prompt_tokens", 0),
+                        "total_tokens": getattr(update.usage, "total_tokens", 0),
                     }
                     is_complete = True  # Usage info usually comes at the end
 
@@ -136,7 +132,7 @@ class GitHubLLM(LLMInterface):
                 temperature=kwargs.get("temperature", self.temperature),
                 max_tokens=kwargs.get("max_tokens", self.max_tokens),
                 top_p=kwargs.get("top_p", 1.0),
-                model_extras={"stream_options": {"include_usage": True}},
+                # model_extras={"stream_options": {"include_usage": True}},
             )
 
             for update in response:
@@ -154,12 +150,8 @@ class GitHubLLM(LLMInterface):
                         "completion_tokens": getattr(
                             update.usage, "completion_tokens", 0
                         ),
-                        "prompt_tokens": getattr(
-                            update.usage, "prompt_tokens", 0
-                        ),
-                        "total_tokens": getattr(
-                            update.usage, "total_tokens", 0
-                        ),
+                        "prompt_tokens": getattr(update.usage, "prompt_tokens", 0),
+                        "total_tokens": getattr(update.usage, "total_tokens", 0),
                     }
                     is_complete = True
 

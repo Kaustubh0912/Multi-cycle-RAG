@@ -12,9 +12,7 @@ async def main():
 
     # Query the system
     print("\nQuerying the system ....")
-    result = await rag.query(
-        "What is the main topic discussed in the documents?"
-    )
+    result = await rag.query("What is the main topic discussed in the documents?")
 
     print(f"Response:{result.response}")
     print(f"Sources used: {result.metadata['num_sources']}")
